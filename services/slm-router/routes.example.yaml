@@ -1,0 +1,53 @@
+# Example tenant routing file. In cluster this is mounted from the
+# support-platform ConfigMap and reloaded every ROUTE_RELOAD_INTERVAL.
+#
+# tenant_id keys must match the X-Tenant-Id header values Otto sees from
+# the product Next.js proxies (mark8ly, fanzone, homechef).
+
+products:
+  mark8ly:
+    system_prompt_file: /etc/slm-router/prompts/mark8ly.md
+    rag_namespace: mark8ly
+    mcp_servers:
+      - name: mark8ly-mcp
+        url: http://mark8ly-mcp.mark8ly.svc.cluster.local:8765/mcp
+        auth_header: X-MCP-Key
+        auth_env_var: MARK8LY_MCP_KEY
+    escalation:
+      confidence_threshold: 0.6
+      keywords:
+        - "refund"
+        - "lawyer"
+        - "ombudsman"
+      max_tool_failures: 2
+
+  fanzone:
+    system_prompt_file: /etc/slm-router/prompts/fanzone.md
+    rag_namespace: fanzone
+    mcp_servers:
+      - name: fanzone-mcp
+        url: http://fanzone-mcp.fanzone.svc.cluster.local:8765/mcp
+        auth_header: X-MCP-Key
+        auth_env_var: FANZONE_MCP_KEY
+    escalation:
+      confidence_threshold: 0.65
+      keywords:
+        - "refund"
+        - "chargeback"
+      max_tool_failures: 2
+
+  homechef:
+    system_prompt_file: /etc/slm-router/prompts/homechef.md
+    rag_namespace: homechef
+    mcp_servers:
+      - name: homechef-mcp
+        url: http://homechef-mcp.homechef.svc.cluster.local:8765/mcp
+        auth_header: X-MCP-Key
+        auth_env_var: HOMECHEF_MCP_KEY
+    escalation:
+      confidence_threshold: 0.6
+      keywords:
+        - "food poisoning"
+        - "allergic reaction"
+        - "lawyer"
+      max_tool_failures: 2
