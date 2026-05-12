@@ -9,7 +9,7 @@ PyTorch code for the from-scratch decoder-only transformer. Files land here one 
 | `requirements.txt` | env | ✅ |
 | `config.py` | shared hyperparameters | ✅ |
 | `01_data.py` | TinyStories download + Dataset | ✅ |
-| `02_tokenizer.py` | BPE tokenizer | ☐ |
+| `02_tokenizer.py` | BPE tokenizer | ✅ |
 | `03_embeddings.py` | token + positional embeddings | ☐ |
 | `04_attention.py` | scaled dot-product + multi-head + causal mask | ☐ |
 | `05_block.py` | transformer block (attention + FFN + residual + LN) | ☐ |
