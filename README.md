@@ -8,13 +8,15 @@ This repo is **learning-first**. Phase 1 is pedagogy — understand transformers
 
 ## The 3-phase roadmap
 
-| Phase | Goal | Model | Outcome |
-|-------|------|-------|---------|
-| **1. From-scratch SLM** | Understand transformers end-to-end | ~10–50M params, decoder-only, trained on TinyStories | Working tiny GPT, generates coherent toy text, you understand every line |
-| **2. Fine-tune an open SLM** | Adapt a real SLM to Tesserix domain | Phi-3-mini / Llama-3.2-1B / Gemma-2B with LoRA on product docs | Model that speaks "Tesserix" — knows our products, terminology, support patterns |
-| **3. Agentic support platform** | Production chatbot per product | Phase-2 model + per-product RAG namespaces + router agent + tools | Live chatbot routed per product, deployed on GKE with Istio + ArgoCD |
+| Phase | Goal | Outcome |
+|-------|------|---------|
+| **1. From-scratch SLM** | Understand transformers end-to-end | Working tiny GPT (~25M params) on TinyStories, you understand every line |
+| **2. Optimizations** (two parallel sub-tracks) | Make the model + retrieval production-grade | Fine-tuned SLM at <500ms p95, tuned per-product RAG with reranker and ingestion pipeline |
+| **2A. Model & Serving** | LoRA fine-tune + inference optimizations | Phi-3-mini / Llama-3.2-3B with KV cache, quantization, batching, FlashAttention, speculative decoding, vLLM tuning |
+| **2B. Retrieval & Indexing** | Production-grade RAG stack | Per-product index, smart chunking, hybrid search, cross-encoder reranking, query rewriting, agentic RAG patterns, doc-ingestion pipeline |
+| **3. Agentic support platform** | Production chatbot integrated across products | Phase-2 components wired up: support-bff, router agent, MCP, tool layer, deployed on GKE with Istio + ArgoCD |
 
-Phase 1 is where we're starting. Don't skip ahead.
+Phase 1 is where we're starting. Phase 3 doesn't start until both 2A and 2B finish (the chosen "optimize fully before integration" path).
 
 ---
 
@@ -36,18 +38,23 @@ The from-scratch step in Phase 1 doesn't produce the production model — it pro
 
 ```
 slm-support-platform/
-├── README.md                          this file
+├── README.md                              this file
 ├── docs/
-│   ├── 01-slm-fundamentals.md         what is an SLM, vs LLM, why small
-│   ├── 02-end-state-architecture.md   the production support chatbot vision
-│   ├── 03-phase1-build-plan.md        what we'll build in Phase 1, step by step
+│   ├── 01-slm-fundamentals.md             what is an SLM, vs LLM, why small
+│   ├── 02-end-state-architecture.md       the production support chatbot vision
+│   ├── 03-phase1-build-plan.md            from-scratch transformer build
+│   ├── 04-phase2a-model-serving.md        LoRA + KV cache + quant + batching + vLLM
+│   ├── 05-phase2b-retrieval-indexing.md   chunking + index + hybrid + rerank + agentic RAG
 │   └── diagrams/
-│       ├── end-state.md               Mermaid: full prod system
-│       └── transformer-block.md       Mermaid: attention + FFN inside one block
-├── phase1-from-scratch/               PyTorch code lands here as we build
-├── phase2-fine-tuning/                placeholder — LoRA / QLoRA scripts later
-├── phase3-agentic-support/            placeholder — RAG + agent router + tools
-└── data/                              datasets (gitignored)
+│       ├── architecture.drawio            full system in drawio / Lucidchart
+│       ├── customer-flow.drawio           swim-lane request flow
+│       └── *.md                           Mermaid sources
+├── phase1-from-scratch/                   from-scratch transformer code
+├── phase2-optimizations/
+│   ├── 2a-model-serving/                  fine-tune + inference optimizations
+│   └── 2b-retrieval-indexing/             RAG stack
+├── phase3-agentic-support/                BFF + router + MCP + tools (after Phase 2)
+└── data/                                  datasets (gitignored)
 ```
 
 ---
@@ -57,6 +64,8 @@ slm-support-platform/
 1. [`docs/01-slm-fundamentals.md`](docs/01-slm-fundamentals.md) — what SLMs are and why we're using one
 2. [`docs/02-end-state-architecture.md`](docs/02-end-state-architecture.md) — the destination, so the learning has purpose
 3. [`docs/03-phase1-build-plan.md`](docs/03-phase1-build-plan.md) — the actual Phase 1 build sequence
+4. [`docs/04-phase2a-model-serving.md`](docs/04-phase2a-model-serving.md) — Phase 2A plan: fine-tuning + inference optimizations
+5. [`docs/05-phase2b-retrieval-indexing.md`](docs/05-phase2b-retrieval-indexing.md) — Phase 2B plan: retrieval stack
 
 ### Architecture diagrams (drawio / Lucidchart)
 
