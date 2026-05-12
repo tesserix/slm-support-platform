@@ -1,0 +1,9 @@
+.git
+.gitignore
+*.md
+!README.md
+.env
+.env.*
+Dockerfile
+.dockerignore
+tests/

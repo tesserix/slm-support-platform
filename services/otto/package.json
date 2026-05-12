@@ -1,0 +1,11 @@
+{
+  "name": "@mark8ly/otto",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "build": "go build -o bin/server ./cmd/server",
+    "test": "go test ./...",
+    "lint": "go vet ./...",
+    "dev": "go run ./cmd/server"
+  }
+}
