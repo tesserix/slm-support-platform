@@ -109,12 +109,14 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 		"message_id", ev.MessageID,
 	)
 
-	product, ok := o.deps.Config.Routes.Products[ev.TenantID]
+	product, productName, ok := o.deps.Config.Routes.ResolveProduct(ev.TenantID)
 	if !ok {
-		// Unknown tenant — escalate so a human notices the config gap.
+		// Unknown tenant and no default fallback — escalate so a human
+		// notices the config gap.
 		log.Warn("unknown tenant, escalating")
 		return o.escalate(ctx, ev, "unknown_tenant")
 	}
+	log = log.With("product", productName)
 	evaluator := escalation.New(product.Escalation)
 
 	// Pre-check: keywords and explicit human requests bypass the model.

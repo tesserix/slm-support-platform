@@ -12,6 +12,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"slices"
 	"time"
 
 	"github.com/kelseyhightower/envconfig"
@@ -79,6 +80,38 @@ type Config struct {
 type Routes struct {
 	// Products maps tenant_id → product-specific routing.
 	Products map[string]ProductConfig `yaml:"products"`
+
+	// DefaultTenant is the product key used when an incoming message's
+	// tenant_id doesn't match any Products key or alias. mark8ly's
+	// storefront sends platform-api UUIDs we don't know ahead of time;
+	// the default catches them.
+	//
+	// Set to "" to disable the default (unknown tenants escalate).
+	DefaultTenant string `yaml:"default_tenant"`
+}
+
+// ResolveProduct looks up the routing config for a tenant_id received
+// on an Otto message. Resolution order:
+//
+//	1. exact match on Products map key
+//	2. any ProductConfig that lists tenantID in its Aliases
+//	3. the DefaultTenant (looked up in Products)
+//	4. zero value + ok=false
+func (r Routes) ResolveProduct(tenantID string) (ProductConfig, string, bool) {
+	if p, ok := r.Products[tenantID]; ok {
+		return p, tenantID, true
+	}
+	for name, p := range r.Products {
+		if slices.Contains(p.Aliases, tenantID) {
+			return p, name, true
+		}
+	}
+	if r.DefaultTenant != "" {
+		if p, ok := r.Products[r.DefaultTenant]; ok {
+			return p, r.DefaultTenant, true
+		}
+	}
+	return ProductConfig{}, "", false
 }
 
 // ProductConfig is the per-tenant policy slm-router applies.
@@ -89,6 +122,12 @@ type ProductConfig struct {
 
 	// pgvector namespace to query for this tenant's docs.
 	RAGNamespace string `yaml:"rag_namespace"`
+
+	// Aliases let one ProductConfig serve multiple tenant_id values.
+	// Used for mark8ly because its storefront sends platform-api UUIDs
+	// (one per store) but all of them should route to the same mark8ly
+	// system prompt + RAG namespace.
+	Aliases []string `yaml:"aliases"`
 
 	// MCP servers slm-router can call as tools for this tenant.
 	MCPServers []MCPServerConfig `yaml:"mcp_servers"`
