@@ -2,28 +2,44 @@
 
 PyTorch code for the from-scratch decoder-only transformer. Files land here one step at a time, following [`../docs/03-phase1-build-plan.md`](../docs/03-phase1-build-plan.md).
 
-## Planned files
+## Status
 
+| File | Step | Status |
+|------|------|--------|
+| `requirements.txt` | env | ✅ |
+| `config.py` | shared hyperparameters | ✅ |
+| `01_data.py` | TinyStories download + Dataset | ✅ |
+| `02_tokenizer.py` | BPE tokenizer | ☐ |
+| `03_embeddings.py` | token + positional embeddings | ☐ |
+| `04_attention.py` | scaled dot-product + multi-head + causal mask | ☐ |
+| `05_block.py` | transformer block (attention + FFN + residual + LN) | ☐ |
+| `06_model.py` | the full GPT-style model | ☐ |
+| `07_train.py` | training loop with warmup + cosine LR | ☐ |
+| `08_generate.py` | sampling: greedy / temperature / top-k / top-p | ☐ |
+
+## Environment setup
+
+```bash
+cd phase1-from-scratch
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
-phase1-from-scratch/
-├── 01_data.py          download + load TinyStories
-├── 02_tokenizer.py     BPE tokenizer
-├── 03_embeddings.py    token + positional embeddings
-├── 04_attention.py     scaled dot-product + multi-head + causal mask
-├── 05_block.py         transformer block (attention + FFN + residual + LN)
-├── 06_model.py         the full GPT-style model
-├── 07_train.py         training loop with warmup + cosine LR
-├── 08_generate.py      sampling: greedy / temperature / top-k / top-p
-└── config.py           shared hyperparameters
+
+Then to smoke-test the data pipeline:
+
+```bash
+python 01_data.py
 ```
 
-Nothing is here yet — that's intentional. Read the docs first, then we'll write `01_data.py` together.
+On first run it downloads ~500 MB of TinyStories, tokenises a million tokens, and prints a sample. Subsequent runs reuse the cached tokens.
 
-## Environment
+## Hardware
 
-We'll set up a `requirements.txt` and a venv when the first code file lands. Expected stack:
+Per `../docs/03-phase1-build-plan.md`:
 
-- Python 3.11+
-- PyTorch 2.x (CUDA on Linux GPU, MPS on Apple Silicon, or CPU)
-- `datasets` for TinyStories
-- `tqdm`, `numpy`, `wandb` (optional logging)
+| Setup | Time to train ~25M model on TinyStories |
+|-------|-----------------------------------------|
+| L4 / 3090 / 4090 | ~1–3 hours |
+| Apple M-series (MPS backend) | ~6–10 hours |
+| CPU only | overnight |

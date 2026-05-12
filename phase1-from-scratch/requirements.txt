@@ -1,0 +1,10 @@
+# Phase 1 — from-scratch SLM (Python 3.11+).
+#
+# Pin upper bounds to keep the learning code stable; lower bounds are
+# floor versions known to work with each named feature we use.
+torch>=2.4,<3.0          # tensors, autograd, MPS/CUDA backends
+datasets>=2.20,<4.0      # TinyStories loader from HF hub
+tiktoken>=0.7,<1.0       # GPT-2 BPE tokenizer (placeholder; we'll write our own in step 2)
+tqdm>=4.66,<5.0          # progress bars in train loop
+numpy>=1.26,<3.0         # general
+wandb>=0.17,<1.0         # optional run logging — disable with WANDB_MODE=disabled
