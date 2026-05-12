@@ -3,29 +3,29 @@
 Standalone copy of the end-state Mermaid diagram for easy reference. Source of truth is [`../02-end-state-architecture.md`](../02-end-state-architecture.md).
 
 ```mermaid
-flowchart TB
-    subgraph "Products (frontends)"
-        M[mark8ly.com<br/>storefront]
+graph TB
+    subgraph products[Products frontends]
+        M[mark8ly.com storefront]
         F[fanzone-battleground.com]
-        H[fe3dr.com<br/>HomeChef]
+        H[fe3dr.com HomeChef]
         G[gameverse.tesserix.com]
         S[stockpilot.tesserix.com]
     end
 
-    subgraph "Edge"
-        CW[Chat widget<br/>iframe / web component]
+    subgraph edge[Edge]
+        CW[Chat widget - iframe / web component]
     end
 
-    subgraph "GKE: support-platform namespace"
-        BFF[support-bff<br/>Go / Gin]
-        ROUTER[Router agent<br/>detects product + intent]
-        RAG[RAG retriever<br/>per-product namespaces]
-        VDB[(Vector DB<br/>Qdrant / pgvector)]
-        SLM[SLM inference<br/>vLLM serving Phi-3-mini<br/>fine-tuned on Tesserix data]
-        TOOLS[Tool layer<br/>order lookup, ticket create,<br/>escalation, refund-status]
+    subgraph gke[GKE - support-platform namespace]
+        BFF[support-bff - Go / Gin]
+        ROUTER[Router agent - detects product + intent]
+        RAG[RAG retriever - per-product namespaces]
+        VDB[(Vector DB - Qdrant / pgvector)]
+        SLM[SLM inference - vLLM serving Phi-3-mini fine-tuned on Tesserix data]
+        TOOLS[Tool layer - order lookup, ticket create, escalation, refund-status]
     end
 
-    subgraph "Existing product APIs"
+    subgraph apis[Existing product APIs]
         MAPI[mark8ly APIs]
         FAPI[fanzone APIs]
         HAPI[homechef APIs]

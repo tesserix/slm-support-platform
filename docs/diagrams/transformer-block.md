@@ -5,7 +5,7 @@ Standalone reference for the decoder-only transformer block we'll implement in `
 ## One transformer block (pre-norm layout)
 
 ```mermaid
-flowchart TB
+graph TB
     X["x (residual stream)<br/>shape: (batch, seq, d_model)"]
     LN1["LayerNorm"]
     ATT["Multi-head self-attention<br/>causal mask<br/>n_heads × d_head"]
@@ -25,7 +25,7 @@ flowchart TB
 ## Multi-head attention internals
 
 ```mermaid
-flowchart LR
+graph LR
     X["x<br/>(B, T, d_model)"]
     QPROJ["Linear → Q<br/>(B, T, d_model)"]
     KPROJ["Linear → K<br/>(B, T, d_model)"]
@@ -47,7 +47,7 @@ flowchart LR
 ## Full model = stack of N blocks
 
 ```mermaid
-flowchart TB
+graph TB
     TOK["Token IDs<br/>(B, T)"]
     EMB["Token embed<br/>+ pos embed"]
     B1["Block 1"]

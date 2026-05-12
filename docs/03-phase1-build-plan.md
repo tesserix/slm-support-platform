@@ -9,7 +9,7 @@ This is the **nanoGPT path**, but we'll build each piece with explanation, not j
 A decoder-only transformer, same family as GPT-2/3, Llama, Phi, Gemma:
 
 ```mermaid
-flowchart TB
+graph TB
     INPUT["Input tokens<br/>(IDs from tokenizer)"]
     EMB["Token embedding<br/>+ positional embedding"]
     B1["Transformer block 1"]
@@ -25,7 +25,7 @@ flowchart TB
 Each transformer block:
 
 ```mermaid
-flowchart TB
+graph TB
     X["x (residual stream)"]
     LN1["LayerNorm"]
     ATT["Multi-head<br/>self-attention<br/>(causal mask)"]
