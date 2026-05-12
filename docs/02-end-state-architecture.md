@@ -2,6 +2,8 @@
 
 This is where we're heading. Read this *before* building so the from-scratch work in Phase 1 connects to a destination.
 
+> **Editable architecture diagrams** in drawio / Lucidchart format live in [`diagrams/architecture.drawio`](diagrams/architecture.drawio) (system overview) and [`diagrams/customer-flow.drawio`](diagrams/customer-flow.drawio) (one request, end to end). Open instructions in [`diagrams/README.md`](diagrams/README.md). The Mermaid block below is a quick inline view.
+
 ## The customer-facing problem
 
 Today, support queries across Tesserix products go to humans:

@@ -58,4 +58,10 @@ slm-support-platform/
 2. [`docs/02-end-state-architecture.md`](docs/02-end-state-architecture.md) — the destination, so the learning has purpose
 3. [`docs/03-phase1-build-plan.md`](docs/03-phase1-build-plan.md) — the actual Phase 1 build sequence
 
+### Architecture diagrams (drawio / Lucidchart)
+
+- [`docs/diagrams/architecture.drawio`](docs/diagrams/architecture.drawio) — full system: products → chat widget → edge → support platform (BFF, Router, Orchestrator, MCP, RAG, SLM) → per-product MCP servers → product APIs
+- [`docs/diagrams/customer-flow.drawio`](docs/diagrams/customer-flow.drawio) — one customer chat message travelling through every component, end to end, in swim lanes
+- [`docs/diagrams/README.md`](docs/diagrams/README.md) — how to open them (diagrams.net, Lucidchart, VS Code Draw.io extension)
+
 Then we start writing code in [`phase1-from-scratch/`](phase1-from-scratch/).
