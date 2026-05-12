@@ -2,6 +2,8 @@
 
 Grounded in the actual state of `tesseract-prod-in-gke` (project `tesseracthub-480811`, region `asia-south1`) as of the planning date. Connect with `kubectl config use-context gke_tesseracthub-480811_asia-south1_tesseract-prod-in-gke` to verify any claim here against current reality.
 
+> **Read [`08-otto-integration.md`](08-otto-integration.md) first.** Otto replaces `support-bff` / `support-router` / `support-orchestrator` (these three are no longer separate services). The component table below is updated to reflect that. Product scope is now **three** to start: mark8ly, fanzone, homechef.
+
 ## Cluster reality
 
 | Thing | Current state | Implication |
@@ -113,19 +115,19 @@ Stateful pieces (pgvector, Postgres) don't autoscale on the data path. Reads can
 
 | Component | Namespace | Type | Scaling | Replicas (min→max) | Per-pod | Notes |
 |-----------|-----------|------|---------|--------------------|---------|-------|
-| `support-bff` | `support-platform` | Knative | request | 0→5 | 200m / 256 Mi | session, SSE streaming |
-| `support-router` | `support-platform` | Knative | request | 0→3 | 200m / 256 Mi | product + intent classify |
-| `support-orchestrator` | `support-platform` | Knative | request | 0→3 | 300m / 512 Mi | agent loop, MCP client |
-| `slm-inference` | `support-platform` | Deployment + KEDA | Prom queue | 1→3 | 2 CPU / 6 Gi | llama.cpp server, int4 GGUF |
+| `otto` (moved from mark8ly) | `support-platform` | Deployment | KEDA on WS conn | 1→3 | 200m / 512 Mi | Go server, WebSocket, multi-tenant via X-Tenant-Id |
+| `support-mongo` | `support-platform` | StatefulSet | none | 1+1 replica | reuse Mongo chart | Otto's persistent store (`otto` DB) |
+| `slm-router` (gateway) | `support-platform` | Deployment | KEDA on Mongo change-stream lag | 1→3 | 300m / 512 Mi | Watches Otto's Mongo, routes tenant → RAG → SLM → MCP |
+| `slm-inference` | `support-platform` | Deployment + KEDA | Prom queue | 1→3 | 2 CPU / 6 Gi | llama.cpp server, int4 GGUF (Qwen2.5-1.5B) |
 | `reranker` | `support-platform` | Deployment + KEDA | Prom queue | 0→2 | 500m / 2 Gi | bge-reranker-base int8 |
 | `embedder` | `support-platform` | Deployment + KEDA | Prom queue | 0→2 | 500m / 1 Gi | bge-small-en, cacheable |
-| `support-postgres` (CNPG) | `support-platform` | StatefulSet | none | 1+1 replica | reuse CNPG defaults | pgvector enabled, namespaces table |
+| `support-postgres` (CNPG) | `support-platform` | StatefulSet | none | 1+1 replica | reuse CNPG defaults | pgvector enabled, per-product RAG namespaces |
 | `doc-ingestion` | `support-platform` | CronJob | n/a | every 30 min | 500m / 1 Gi | Markdown → chunks → embeds → upserts |
-| `mark8ly-mcp` | `mark8ly` | Knative | request | 0→2 | 100m / 256 Mi | one per product, owned by product team |
-| `fanzone-mcp` | `fanzone` | Knative | request | 0→2 | 100m / 256 Mi | |
-| `homechef-mcp` | `homechef` | Knative | request | 0→2 | 100m / 256 Mi | |
-| `gameverse-mcp` | `gameverse` | Knative | request | 0→2 | 100m / 256 Mi | |
-| `stockpilot-mcp` | `stockpilot` | Knative | request | 0→2 | 100m / 256 Mi | (`scrapper-mcp` already exists as model) |
+| `mark8ly-mcp` | `mark8ly` | Knative | request | 0→2 | 100m / 256 Mi | tools: find_product, check_inventory, track_order |
+| `fanzone-mcp` | `fanzone` | Knative | request | 0→2 | 100m / 256 Mi | tools: match_status, redeem_reward, leaderboard |
+| `homechef-mcp` | `homechef` | Knative | request | 0→2 | 100m / 256 Mi | tools: lookup_order, track_delivery, chef_payout_status |
+
+Future onboarding (same pattern, not in v1 scope): `gameverse-mcp`, `stockpilot-mcp` once mark8ly + fanzone + homechef are stable.
 
 CPU requests only — no CPU limits (per the Tesserix convention).
 

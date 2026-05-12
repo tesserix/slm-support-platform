@@ -2,17 +2,18 @@
 
 The previous docs cover *what* to build and *why*. This doc covers *what to do next*, concretely.
 
-Three workstreams run in parallel. Two can start immediately; the third unblocks once Phase 2 finishes.
+> **Updated after Otto discovery.** A new workstream **D** is now the first thing to land — Otto migration from mark8ly. See [`08-otto-integration.md`](08-otto-integration.md). Workstream A's "pilot strategy" reshapes around mark8ly being the natural first AI-enabled product because that's where Otto already exists.
 
-## The three workstreams
+## The four workstreams
 
 | ID | Workstream | Can start when | Lives in |
 |----|------------|---------------|----------|
-| **A** | **Pilot integration** — pick a product, mount the widget, prove the end-to-end | Phase 2A + 2B + B all done | this repo + a product repo + `@tesserix/web` |
-| **B** | **`tesserix-k8s` scaffold** — Helm subcharts, ArgoCD app, namespace, secrets | Now | `tesserix-k8s/charts/apps/support-platform/` |
-| **C** | **Phase 1 from-scratch SLM** — learning track | Now | `phase1-from-scratch/` (this repo) |
+| **D** | **Otto migration** — move Otto from mark8ly to this repo, stand up shared Otto + support-mongo, repoint mark8ly's proxy | Now (highest priority) | this repo + mark8ly + `tesserix-k8s` |
+| **B** | **`tesserix-k8s` scaffold** — namespace, NetworkPolicy, ArgoCD app, ExternalSecrets, KEDA stubs, support-postgres | Now (parallel with D) | `tesserix-k8s/charts/apps/support-platform/` |
+| **C** | **Phase 1 from-scratch SLM** — learning track, no production dependency | Now (parallel with D + B) | `phase1-from-scratch/` (this repo) |
+| **A** | **AI rollout per product** — slm-inference + slm-router + per-product MCP, then enable AI for mark8ly → fanzone → homechef | D + B + Phase 2A + 2B all done | this repo + product repos + `tesserix-k8s` |
 
-B and C are independent and can both start today. A is gated by everything finishing.
+D, B, and C are independent and can all start today. A is gated on D, B, and Phase 2 finishing.
 
 ---
 

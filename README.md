@@ -1,8 +1,10 @@
 # slm-support-platform
 
-Building a Small Language Model from scratch, then growing it into an agentic support chatbot that handles customer queries across the Tesserix product portfolio (mark8ly, fanzone, homechef, gameverse, stockpilot, …).
+Building a Small Language Model from scratch, then growing it into an agentic support chatbot that handles customer queries across three Tesserix products to start with — **mark8ly**, **fanzone**, **homechef** — using an existing chat platform (Otto) as the front of house.
 
 This repo is **learning-first**. Phase 1 is pedagogy — understand transformers by building one. Phases 2 and 3 take an open-weight small model into production behind the products on GKE.
+
+> **2026-05-12 update:** [`docs/08-otto-integration.md`](docs/08-otto-integration.md) supersedes the BFF-from-scratch plan. Otto (currently in `mark8ly/services/otto`) is being moved into this repo as the canonical, multi-tenant chat platform. A new `slm-router` service is the gateway that detects tenant → product → RAG namespace → MCP server and calls `slm-inference`.
 
 ---
 
@@ -68,6 +70,7 @@ slm-support-platform/
 5. [`docs/05-phase2b-retrieval-indexing.md`](docs/05-phase2b-retrieval-indexing.md) — Phase 2B plan: retrieval stack
 6. [`docs/06-gke-deployment-plan.md`](docs/06-gke-deployment-plan.md) — actual deployment plan for `tesseract-prod-in-gke` (CPU-only path)
 7. [`docs/07-execution-roadmap.md`](docs/07-execution-roadmap.md) — what to do next: three parallel workstreams, pilot strategy, Milestone Zero
+8. [`docs/08-otto-integration.md`](docs/08-otto-integration.md) — **read this** — Otto migration into this repo, slm-router as the gateway, multi-tenant topology for mark8ly + fanzone + homechef
 
 ### Architecture diagrams (drawio / Lucidchart)
 
