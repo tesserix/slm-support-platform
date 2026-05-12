@@ -1,6 +1,8 @@
 # 04 — Phase 2A: Model & Serving Optimizations
 
-Goal of Phase 2A: take a real open-weight SLM (3.8B params or so), fine-tune it on Tesserix data, and serve it fast and cheap enough for live customer support — sub-500ms p95 latency, under $0.01 per ticket, on a single L4 GPU in our GKE cluster.
+Goal of Phase 2A: take a real open-weight SLM, fine-tune it on Tesserix data, and serve it fast enough for live customer support on the actual `tesseract-prod-in-gke` cluster.
+
+> **Deployment target decided:** CPU-only path for v1, on the existing `optimized-v2` node pool. See [`06-gke-deployment-plan.md`](06-gke-deployment-plan.md) for the cluster-specific decisions. This doc covers the *technique* layer; the GKE doc covers the *deployment* layer. A few step choices below differ for CPU vs GPU — both paths are noted.
 
 This phase is structured as a sequence of optimizations layered on top of each other. Each step adds one technique, measures its effect, and moves on. The point isn't just to end up with a fast system; it's to understand *which* of these techniques bought how much speed and why.
 

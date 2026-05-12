@@ -66,6 +66,7 @@ slm-support-platform/
 3. [`docs/03-phase1-build-plan.md`](docs/03-phase1-build-plan.md) — the actual Phase 1 build sequence
 4. [`docs/04-phase2a-model-serving.md`](docs/04-phase2a-model-serving.md) — Phase 2A plan: fine-tuning + inference optimizations
 5. [`docs/05-phase2b-retrieval-indexing.md`](docs/05-phase2b-retrieval-indexing.md) — Phase 2B plan: retrieval stack
+6. [`docs/06-gke-deployment-plan.md`](docs/06-gke-deployment-plan.md) — actual deployment plan for `tesseract-prod-in-gke` (CPU-only path)
 
 ### Architecture diagrams (drawio / Lucidchart)
 
