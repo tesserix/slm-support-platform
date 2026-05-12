@@ -2,20 +2,30 @@
 // MongoDB for new customer messages, looks up per-tenant routing,
 // retrieves RAG context, calls slm-inference, executes MCP tool calls,
 // and posts the AI reply back as a SenderAssistant message.
-//
-// This file is the boot wiring only. The real work lives in the
-// orchestrator package (added in subsequent commits).
 package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"os/signal"
 	"syscall"
+	"time"
+
+	_ "github.com/lib/pq"
+	"go.mongodb.org/mongo-driver/mongo"
+	mongoopts "go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/config"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/embed"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/httpserver"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/inference"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/logger"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/mcp"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/orchestrator"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/otto"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/rerank"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/retriever"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/watcher"
 )
 
@@ -24,7 +34,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("config load: %v", err)
 	}
-
 	lg := logger.New(cfg.Env.Env)
 	lg.Info("slm-router booting",
 		"http_port", cfg.Env.HTTPPort,
@@ -34,38 +43,66 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	// Mongo watcher — opens a change stream on Otto's `messages`
-	// collection and yields new customer messages into a channel the
-	// orchestrator drains (orchestrator lands in D6).
+	// --- Mongo client (for Otto watcher + Otto writer) ---
+	mongoClient, err := mongo.Connect(ctx, mongoopts.Client().ApplyURI(cfg.Env.MongoURI))
+	if err != nil {
+		log.Fatalf("mongo connect: %v", err)
+	}
+	defer func() {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = mongoClient.Disconnect(closeCtx)
+	}()
+	mongoDB := mongoClient.Database(cfg.Env.MongoDatabase)
+
+	// --- pgvector ---
+	pg, err := sql.Open("postgres", cfg.Env.VectorDBDSN)
+	if err != nil {
+		log.Fatalf("pgvector open: %v", err)
+	}
+	pg.SetMaxOpenConns(10)
+	pg.SetMaxIdleConns(2)
+	defer pg.Close()
+	pingCtx, pingCancel := context.WithTimeout(ctx, 5*time.Second)
+	if err := pg.PingContext(pingCtx); err != nil {
+		pingCancel()
+		log.Fatalf("pgvector ping: %v", err)
+	}
+	pingCancel()
+
+	// --- collaborators ---
 	w, err := watcher.NewMongo(ctx, cfg.Env.MongoURI, cfg.Env.MongoDatabase, "messages", lg)
 	if err != nil {
-		lg.Error("mongo watcher init failed", "err", err.Error())
 		log.Fatalf("mongo watcher: %v", err)
 	}
 	defer func() {
-		closeCtx, cancel := context.WithTimeout(context.Background(), 5*1e9) // 5s
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = w.Close(closeCtx)
 	}()
 
-	events := make(chan watcher.CustomerMessage, 64)
+	deps := orchestrator.Deps{
+		Config:    cfg,
+		Embedder:  embed.NewHTTP(cfg.Env.EmbedderURL, embed.WithExpectedDim(384)),
+		Retriever: retriever.NewPostgres(pg),
+		Reranker:  rerank.NewHTTP(cfg.Env.RerankerURL),
+		Inference: inference.NewHTTP(cfg.Env.InferenceURL),
+		MCP:       mcp.NewHTTP(),
+		Otto:      otto.NewMongoWriter(mongoDB),
+		Logger:    lg,
+	}
+	orch, err := orchestrator.New(deps)
+	if err != nil {
+		log.Fatalf("orchestrator: %v", err)
+	}
+
+	// --- pipe events from watcher to orchestrator ---
+	events := make(chan watcher.CustomerMessage, 128)
 	go w.Start(ctx, events)
-	// Drain events until orchestrator is wired (D6). For now this loop
-	// just logs that we received them, proving the watcher works end to
-	// end against a real Otto Mongo instance.
-	go func() {
-		for ev := range events {
-			lg.Info("customer message received",
-				"tenant_id", ev.TenantID,
-				"conversation_id", ev.ConversationID,
-				"message_id", ev.MessageID,
-			)
-		}
-	}()
+	go orch.Run(ctx, events)
 
 	srv := httpserver.New(cfg.Env.HTTPPort, lg)
 	srv.SetReady(true)
-
 	if err := srv.Run(ctx); err != nil {
 		lg.Error("http server exited with error", "err", err.Error())
 	}

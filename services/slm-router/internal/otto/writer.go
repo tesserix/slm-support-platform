@@ -22,12 +22,24 @@ import (
 	"github.com/google/uuid"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // Writer posts assistant replies and updates conversation state.
 type Writer interface {
 	PostAssistantMessage(ctx context.Context, msg AssistantMessage) error
 	MarkNeedsHuman(ctx context.Context, conversationID string, reason string) error
+	// RecentMessages returns up to limit most-recent messages on a
+	// conversation, ordered oldest-first (ready for direct
+	// concatenation into the model's messages array).
+	RecentMessages(ctx context.Context, conversationID string, limit int) ([]HistoryMessage, error)
+}
+
+// HistoryMessage is one row of the conversation history.
+type HistoryMessage struct {
+	SenderType string // "customer" | "staff" | "assistant" | "system"
+	Body       string
+	CreatedAt  time.Time
 }
 
 // AssistantMessage is the input to PostAssistantMessage. SenderID is
@@ -105,6 +117,45 @@ func (w *MongoWriter) PostAssistantMessage(ctx context.Context, msg AssistantMes
 		return fmt.Errorf("update conversation counters: %w", err)
 	}
 	return nil
+}
+
+// RecentMessages reads the last `limit` messages on the conversation,
+// returning them oldest-first.
+func (w *MongoWriter) RecentMessages(ctx context.Context, conversationID string, limit int) ([]HistoryMessage, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	filter := bson.M{"conversation_id": conversationID}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "created_at", Value: -1}}).
+		SetLimit(int64(limit))
+	cur, err := w.db.Collection("messages").Find(ctx, filter, opts)
+	if err != nil {
+		return nil, fmt.Errorf("query history: %w", err)
+	}
+	defer cur.Close(ctx)
+	var reversed []HistoryMessage
+	for cur.Next(ctx) {
+		var doc struct {
+			SenderType string    `bson:"sender_type"`
+			Body       string    `bson:"body"`
+			CreatedAt  time.Time `bson:"created_at"`
+		}
+		if err := cur.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("decode history: %w", err)
+		}
+		reversed = append(reversed, HistoryMessage{
+			SenderType: doc.SenderType,
+			Body:       doc.Body,
+			CreatedAt:  doc.CreatedAt,
+		})
+	}
+	// Reverse to oldest-first.
+	out := make([]HistoryMessage, len(reversed))
+	for i := range reversed {
+		out[i] = reversed[len(reversed)-1-i]
+	}
+	return out, nil
 }
 
 // MarkNeedsHuman flips NeedsHuman to true and posts a small system
