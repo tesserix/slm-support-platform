@@ -3,13 +3,17 @@ package message
 import "time"
 
 // SenderType distinguishes who wrote a message. System messages come from
-// the service itself (e.g. "Sara joined the chat").
+// the service itself (e.g. "Sara joined the chat"). Assistant messages
+// come from the slm-router posting on behalf of the SLM; the model name
+// goes in SenderID and a human-friendly label (e.g. "Otto AI") in
+// SenderName.
 type SenderType string
 
 const (
-	SenderCustomer SenderType = "customer"
-	SenderStaff    SenderType = "staff"
-	SenderSystem   SenderType = "system"
+	SenderCustomer  SenderType = "customer"
+	SenderStaff     SenderType = "staff"
+	SenderSystem    SenderType = "system"
+	SenderAssistant SenderType = "assistant"
 )
 
 // Message is one line in a conversation. Stored in its own collection

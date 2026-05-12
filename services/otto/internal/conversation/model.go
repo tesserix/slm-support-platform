@@ -92,6 +92,21 @@ type Conversation struct {
 	// Widget renders a slightly different closed state for these.
 	InactivityClosedAt *time.Time `bson:"inactivity_closed_at,omitempty" json:"inactivity_closed_at,omitempty"`
 
+	// NeedsHuman flips to true when the AI (slm-router) escalates a
+	// conversation: low confidence reply, MCP tool failure, customer
+	// explicitly asks for a human, or a keyword in the escalation policy
+	// (e.g. "refund", "lawyer"). While false, slm-router auto-replies as
+	// the assistant. While true, slm-router stops auto-replying and the
+	// conversation is visible in the staff inbox as a normal pending
+	// thread. Staff can flip it back to false to hand the thread back
+	// to AI if they choose.
+	NeedsHuman bool `bson:"needs_human" json:"needs_human"`
+	// LastAssistantMessageAt is set every time slm-router posts a
+	// SenderAssistant message. Used by the inbox UI to show "AI is
+	// handling this" badges and by sweeper logic to avoid auto-closing
+	// AI-active threads too aggressively.
+	LastAssistantMessageAt *time.Time `bson:"last_assistant_message_at,omitempty" json:"last_assistant_message_at,omitempty"`
+
 	// Denormalised counters for inbox UI.
 	MessageCount        int `bson:"message_count" json:"message_count"`
 	UnreadCountCustomer int `bson:"unread_count_customer" json:"unread_count_customer"`
