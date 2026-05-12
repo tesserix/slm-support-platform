@@ -1,0 +1,35 @@
+name: lint-widget
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/otto-widget/**"
+      - ".github/workflows/lint-widget.yml"
+  pull_request:
+    paths:
+      - "packages/otto-widget/**"
+      - ".github/workflows/lint-widget.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: lint & type-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: install
+        working-directory: packages/otto-widget
+        run: npm install --no-audit --no-fund
+      - name: type-check
+        working-directory: packages/otto-widget
+        run: npm run check-types
+      - name: lint
+        working-directory: packages/otto-widget
+        run: npm run lint
