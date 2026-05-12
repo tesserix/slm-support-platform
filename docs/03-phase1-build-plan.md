@@ -10,34 +10,44 @@ A decoder-only transformer, same family as GPT-2/3, Llama, Phi, Gemma:
 
 ```mermaid
 graph TB
-    INPUT["Input tokens<br/>(IDs from tokenizer)"]
-    EMB["Token embedding<br/>+ positional embedding"]
-    B1["Transformer block 1"]
-    B2["Transformer block 2"]
-    BN["… N blocks total"]
-    LN["Final LayerNorm"]
-    HEAD["LM head<br/>(linear → vocab logits)"]
-    OUT["Next-token probability"]
+    INPUT[Input tokens]
+    EMB[Token plus positional embedding]
+    B1[Transformer block 1]
+    B2[Transformer block 2]
+    BN[N blocks total]
+    LN[Final LayerNorm]
+    HEAD[LM head linear to vocab logits]
+    OUT[Next token probability]
 
-    INPUT --> EMB --> B1 --> B2 --> BN --> LN --> HEAD --> OUT
+    INPUT --> EMB
+    EMB --> B1
+    B1 --> B2
+    B2 --> BN
+    BN --> LN
+    LN --> HEAD
+    HEAD --> OUT
 ```
 
 Each transformer block:
 
 ```mermaid
 graph TB
-    X["x (residual stream)"]
-    LN1["LayerNorm"]
-    ATT["Multi-head<br/>self-attention<br/>(causal mask)"]
-    ADD1["+"]
-    LN2["LayerNorm"]
-    FFN["Feed-forward<br/>(Linear → GELU → Linear)"]
-    ADD2["+"]
-    OUT["x'"]
+    X[x residual stream]
+    LN1[LayerNorm]
+    ATT[Multi head self attention causal mask]
+    ADD1[plus]
+    LN2[LayerNorm]
+    FFN[Feed forward Linear GELU Linear]
+    ADD2[plus]
+    OUT[x prime]
 
-    X --> LN1 --> ATT --> ADD1
+    X --> LN1
+    LN1 --> ATT
+    ATT --> ADD1
     X --> ADD1
-    ADD1 --> LN2 --> FFN --> ADD2
+    ADD1 --> LN2
+    LN2 --> FFN
+    FFN --> ADD2
     ADD1 --> ADD2
     ADD2 --> OUT
 ```

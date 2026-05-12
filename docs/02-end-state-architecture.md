@@ -16,31 +16,31 @@ We want a chatbot embedded in each product that handles the bulk of these — bu
 
 ```mermaid
 graph TB
-    subgraph products[Products frontends]
-        M[mark8ly.com storefront]
-        F[fanzone-battleground.com]
-        H[fe3dr.com HomeChef]
-        G[gameverse.tesserix.com]
-        S[stockpilot.tesserix.com]
+    subgraph Products
+        M[mark8ly]
+        F[fanzone]
+        H[HomeChef]
+        G[gameverse]
+        S[stockpilot]
     end
 
-    subgraph edge[Edge]
-        CW[Chat widget - iframe / web component]
+    subgraph Edge
+        CW[Chat widget]
     end
 
-    subgraph gke[GKE - support-platform namespace]
-        BFF[support-bff - Go / Gin]
-        ROUTER[Router agent - detects product + intent]
-        RAG[RAG retriever - per-product namespaces]
-        VDB[(Vector DB - Qdrant / pgvector)]
-        SLM[SLM inference - vLLM serving Phi-3-mini fine-tuned on Tesserix data]
-        TOOLS[Tool layer - order lookup, ticket create, escalation, refund-status]
+    subgraph GKE
+        BFF[support-bff]
+        ROUTER[Router agent]
+        RAG[RAG retriever]
+        VDB[Vector DB]
+        SLM[SLM inference]
+        TOOLS[Tool layer]
     end
 
-    subgraph apis[Existing product APIs]
-        MAPI[mark8ly APIs]
-        FAPI[fanzone APIs]
-        HAPI[homechef APIs]
+    subgraph ProductAPIs
+        MAPI[mark8ly API]
+        FAPI[fanzone API]
+        HAPI[homechef API]
     end
 
     M --> CW
@@ -48,20 +48,21 @@ graph TB
     H --> CW
     G --> CW
     S --> CW
-
-    CW -->|HTTPS + session| BFF
+    CW --> BFF
     BFF --> ROUTER
-    ROUTER -->|product=mark8ly| RAG
+    ROUTER --> RAG
     RAG --> VDB
     ROUTER --> SLM
     RAG --> SLM
-    SLM -->|wants to call tool| TOOLS
+    SLM --> TOOLS
     TOOLS --> MAPI
     TOOLS --> FAPI
     TOOLS --> HAPI
-    SLM -->|streamed tokens| BFF
-    BFF -->|SSE / WebSocket| CW
+    SLM --> BFF
+    BFF --> CW
 ```
+
+The edges in this rendering are unlabeled for maximum renderer compatibility. The full semantics of each connection are described in the "What each component does" section below.
 
 ## What each component does
 
