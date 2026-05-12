@@ -10,12 +10,26 @@ PyTorch code for the from-scratch decoder-only transformer. Files land here one 
 | `config.py` | shared hyperparameters | ✅ |
 | `01_data.py` | TinyStories download + Dataset | ✅ |
 | `02_tokenizer.py` | BPE tokenizer | ✅ |
-| `03_embeddings.py` | token + positional embeddings | ☐ |
-| `04_attention.py` | scaled dot-product + multi-head + causal mask | ☐ |
-| `05_block.py` | transformer block (attention + FFN + residual + LN) | ☐ |
-| `06_model.py` | the full GPT-style model | ☐ |
-| `07_train.py` | training loop with warmup + cosine LR | ☐ |
-| `08_generate.py` | sampling: greedy / temperature / top-k / top-p | ☐ |
+| `03_embeddings.py` | token + positional embeddings | ✅ |
+| `04_attention.py` | scaled dot-product + multi-head + causal mask | ✅ |
+| `05_block.py` | transformer block (attention + FFN + residual + LN) | ✅ |
+| `06_model.py` | the full GPT-style model | ✅ |
+| `07_train.py` | training loop with warmup + cosine LR | ✅ |
+| `08_generate.py` | sampling: greedy / temperature / top-k / top-p | ✅ |
+
+## End-to-end run
+
+```bash
+cd phase1-from-scratch
+python 01_data.py          # download + tokenise TinyStories (one-time)
+python 02_tokenizer.py     # train a BPE tokenizer (one-time, ~30s)
+python 03_embeddings.py    # smoke-test the embedding layers
+python 04_attention.py     # smoke-test attention + causality
+python 05_block.py         # smoke-test one transformer block
+python 06_model.py         # smoke-test the full model + param count
+python 07_train.py         # train the model (CPU overnight / GPU 1-3h)
+python 08_generate.py --prompt "Once upon a time"
+```
 
 ## Environment setup
 
