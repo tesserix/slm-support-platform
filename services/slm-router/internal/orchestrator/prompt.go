@@ -36,6 +36,20 @@ func (PromptBuilder) Build(systemPrompt string, customer otto.CustomerIdentity, 
 	// what's its baked-in knowledge.
 	var b strings.Builder
 	b.WriteString(systemPrompt)
+	// Universal brevity directive — every tenant inherits this. The
+	// chat surface is a 320px-wide widget; long answers wrap badly,
+	// and the model also tends to hallucinate when given room to
+	// ramble. When a tool returns real numbers, quote them VERBATIM
+	// in one short sentence rather than restating them.
+	b.WriteString(
+		"\n\nResponse rules (apply to EVERY reply):\n" +
+			"- Answer in at most 2 short sentences (~40 words total).\n" +
+			"- If a tool returned a number, name, status, or any concrete value, quote it verbatim. Do not paraphrase or round.\n" +
+			"- No preamble (\"Sure!\", \"Great question!\"), no sign-off (\"Let me know if…\", \"Hope this helps\").\n" +
+			"- If a tool returned `error: not_implemented`, say exactly: \"I can't fetch that yet — would you like me to connect you to a human?\".\n" +
+			"- If a tool returned `error: backend_unreachable` or any other error, say: \"I'm having trouble reaching that data right now — would you like me to connect you to a human?\".\n" +
+			"- Never invent values, never guess.\n",
+	)
 	if customer.UserID != "" || customer.Email != "" {
 		b.WriteString("\n\nCustomer (use these EXACT values for any tool argument named user_id, customer_id, or email — never invent or guess them):\n")
 		if customer.UserID != "" {

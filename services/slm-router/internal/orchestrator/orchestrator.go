@@ -193,7 +193,11 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 		Messages:    msgs,
 		Tools:       tools,
 		Temperature: 0.3,
-		MaxTokens:   400,
+		// MaxTokens caps the reply to ~2 sentences. Customer chat
+		// surfaces work best when the assistant is crisp; longer
+		// answers also blow past the per-slot context window on
+		// follow-up turns.
+		MaxTokens:   180,
 	})
 	if err != nil {
 		log.Error("inference failed", "err", err.Error())
