@@ -1,136 +1,124 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<mxfile host="app.diagrams.net" agent="slm-support-platform" version="22.0.0">
-  <diagram name="Customer Request Flow" id="flow-1">
-    <mxGraphModel dx="1600" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1100" math="0" shadow="0">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-
-        <!-- ======== Title ======== -->
-        <mxCell id="title" value="Customer Request Flow &#8212; one chat message, end to end" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1F1F1F;" vertex="1" parent="1">
-          <mxGeometry x="100" y="20" width="1500" height="40" as="geometry" />
-        </mxCell>
-        <mxCell id="subtitle" value="Example: a HomeChef customer asks &quot;where is my order?&quot;" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#555555;fontStyle=2;" vertex="1" parent="1">
-          <mxGeometry x="100" y="55" width="1500" height="22" as="geometry" />
-        </mxCell>
-
-        <!-- ======== Swim lanes (vertical bands for each actor) ======== -->
-        <mxCell id="lane-cust" value="Customer" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#388E3C;fontSize=12;fontStyle=1;fontColor=#1B5E20;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="60" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-widget" value="Chat Widget&#10;(in product)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#F57C00;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="250" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-bff" value="support-bff" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="440" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-router" value="Router +&#10;Orchestrator" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="630" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-rag" value="RAG +&#10;Vector DB" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#F9A825;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="820" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-slm" value="SLM&#10;(vLLM + Phi-3)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#C62828;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="1010" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-mcp" value="MCP Client" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#00838F;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="1200" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-        <mxCell id="lane-mcp-srv" value="homechef-mcp&#10;+ homechef-api" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E1F5FE;strokeColor=#0277BD;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" vertex="1" parent="1">
-          <mxGeometry x="1390" y="100" width="180" height="940" as="geometry" />
-        </mxCell>
-
-        <!-- ======== Step boxes inside each lane ======== -->
-        <!-- Step 1 -->
-        <mxCell id="s1" value="1. Types&#10;&quot;where is&#10;my order?&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="80" y="160" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 2 -->
-        <mxCell id="s2" value="2. POST /chat&#10;{msg, session,&#10;product=homechef}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F57C00;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="270" y="240" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 3 -->
-        <mxCell id="s3" value="3. Validate&#10;session via&#10;auth-bff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6A1B9A;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="460" y="320" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 4 -->
-        <mxCell id="s4" value="4. Classify&#10;product=homechef&#10;intent=order-status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6A1B9A;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="650" y="400" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 5 -->
-        <mxCell id="s5" value="5. Retrieve&#10;namespace=homechef&#10;top-K chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F9A825;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="840" y="480" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 6 -->
-        <mxCell id="s6" value="6. Generate&#10;with context&#10;decides: need tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="1030" y="560" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 7 -->
-        <mxCell id="s7" value="7. Emits&#10;tool call:&#10;lookup_order()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="1030" y="640" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 8 -->
-        <mxCell id="s8" value="8. Route to&#10;homechef-mcp&#10;over JSON-RPC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#00838F;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="1220" y="720" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 9 -->
-        <mxCell id="s9" value="9. Calls&#10;homechef-api&#10;GET /orders/latest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0277BD;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="1410" y="800" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 10 -->
-        <mxCell id="s10" value="10. Returns&#10;order #12345&#10;status: out for delivery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0277BD;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="1410" y="880" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 11 -->
-        <mxCell id="s11" value="11. SLM gets&#10;tool result,&#10;writes natural reply" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="1030" y="960" width="140" height="60" as="geometry" />
-        </mxCell>
-        <!-- Step 12 -->
-        <mxCell id="s12" value="12. SSE stream:&#10;&quot;Your order #12345&#10;is out for delivery,&#10;ETA 14:30&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;fontSize=10;align=center;" vertex="1" parent="1">
-          <mxGeometry x="80" y="960" width="140" height="60" as="geometry" />
-        </mxCell>
-
-        <!-- ======== Sequential arrows between steps ======== -->
-        <mxCell id="a1" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#388E3C;strokeWidth=2;" edge="1" parent="1" source="s1" target="s2">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a2" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#F57C00;strokeWidth=2;" edge="1" parent="1" source="s2" target="s3">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a3" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=2;" edge="1" parent="1" source="s3" target="s4">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a4" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=2;" edge="1" parent="1" source="s4" target="s5">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a5" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#F9A825;strokeWidth=2;" edge="1" parent="1" source="s5" target="s6">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a6" style="endArrow=classic;html=1;rounded=1;edgeStyle=none;strokeColor=#C62828;strokeWidth=2;" edge="1" parent="1" source="s6" target="s7">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a7" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#C62828;strokeWidth=2;" edge="1" parent="1" source="s7" target="s8">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a8" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#00838F;strokeWidth=2;" edge="1" parent="1" source="s8" target="s9">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a9" style="endArrow=classic;html=1;rounded=1;edgeStyle=none;strokeColor=#0277BD;strokeWidth=2;" edge="1" parent="1" source="s9" target="s10">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a10" value="tool result" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#C62828;strokeWidth=2;dashed=1;fontSize=10;" edge="1" parent="1" source="s10" target="s11">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="a11" value="stream back" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#388E3C;strokeWidth=2;dashed=1;fontSize=10;" edge="1" parent="1" source="s11" target="s12">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-
-        <!-- ======== Side legend ======== -->
-        <mxCell id="legend" value="Solid arrows = forward request path&#10;Dashed arrows = response path&#10;&#10;Same swimlanes as in architecture.drawio." style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontColor=#555555;" vertex="1" parent="1">
-          <mxGeometry x="60" y="1060" width="600" height="60" as="geometry" />
-        </mxCell>
-
-      </root>
-    </mxGraphModel>
-  </diagram>
+<mxfile host="65bd71144e">
+    <diagram name="Customer Request Flow" id="flow-1">
+        <mxGraphModel dx="934" dy="837" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Customer Request Flow — one chat message, end to end" style="text;html=1;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1F1F1F;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="20" width="1500" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="subtitle" value="Example: a HomeChef customer asks &quot;where is my order?&quot;" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontColor=#555555;fontStyle=2;" parent="1" vertex="1">
+                    <mxGeometry x="100" y="55" width="1500" height="22" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-cust" value="Customer" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#388E3C;fontSize=12;fontStyle=1;fontColor=#1B5E20;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-widget" value="Chat Widget&#xa;(in product)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF3E0;strokeColor=#F57C00;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="250" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-bff" value="support-bff" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="440" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-router" value="Router +&#xa;Orchestrator" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="630" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-rag" value="RAG +&#xa;Vector DB" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#F9A825;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="820" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-slm" value="SLM&#xa;(vLLM + Phi-3)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#C62828;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="1010" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-mcp" value="MCP Client" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#00838F;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="1200" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-mcp-srv" value="homechef-mcp&#xa;+ homechef-api" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E1F5FE;strokeColor=#0277BD;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                    <mxGeometry x="1390" y="100" width="180" height="940" as="geometry"/>
+                </mxCell>
+                <mxCell id="s1" value="1. Types&#xa;&quot;where is&#xa;my order?&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="160" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s2" value="2. POST /chat&#xa;{msg, session,&#xa;product=homechef}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F57C00;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="270" y="240" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s3" value="3. Validate&#xa;session via&#xa;auth-bff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6A1B9A;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="460" y="320" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s4" value="4. Classify&#xa;product=homechef&#xa;intent=order-status" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#6A1B9A;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="650" y="400" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s5" value="5. Retrieve&#xa;namespace=homechef&#xa;top-K chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#F9A825;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="840" y="480" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s6" value="6. Generate&#xa;with context&#xa;decides: need tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1030" y="560" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s7" value="7. Emits&#xa;tool call:&#xa;lookup_order()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1030" y="640" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s8" value="8. Route to&#xa;homechef-mcp&#xa;over JSON-RPC" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#00838F;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1220" y="720" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s9" value="9. Calls&#xa;homechef-api&#xa;GET /orders/latest" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0277BD;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1410" y="800" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s10" value="10. Returns&#xa;order #12345&#xa;status: out for delivery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#0277BD;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1410" y="880" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s11" value="11. SLM gets&#xa;tool result,&#xa;writes natural reply" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#C62828;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="1030" y="960" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="s12" value="12. SSE stream:&#xa;&quot;Your order #12345&#xa;is out for delivery,&#xa;ETA 14:30&quot;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#388E3C;fontSize=10;align=center;" parent="1" vertex="1">
+                    <mxGeometry x="80" y="960" width="140" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="a1" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#388E3C;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s1" target="s2" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a2" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#F57C00;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s2" target="s3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a3" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s3" target="s4" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a4" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#6A1B9A;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s4" target="s5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a5" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#F9A825;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s5" target="s6" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a6" style="endArrow=classic;html=1;rounded=1;edgeStyle=none;strokeColor=#C62828;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s6" target="s7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a7" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#C62828;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s7" target="s8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a8" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#00838F;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s8" target="s9" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a9" style="endArrow=classic;html=1;rounded=1;edgeStyle=none;strokeColor=#0277BD;strokeWidth=2;flowAnimation=1;shadow=1;" parent="1" source="s9" target="s10" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a10" value="tool result" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#C62828;strokeWidth=2;dashed=1;fontSize=10;" parent="1" source="s10" target="s11" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="a11" value="stream back" style="endArrow=classic;html=1;rounded=1;edgeStyle=orthogonalEdgeStyle;strokeColor=#388E3C;strokeWidth=2;dashed=1;fontSize=10;" parent="1" source="s11" target="s12" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" value="Solid arrows = forward request path&#xa;Dashed arrows = response path&#xa;&#xa;Same swimlanes as in architecture.drawio." style="text;html=1;align=left;verticalAlign=top;fontSize=11;fontColor=#555555;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="1060" width="600" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="wm-footer-rule" style="endArrow=none;html=1;rounded=0;strokeColor=#9E9E9E;strokeWidth=1;" parent="1" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <mxPoint x="60" y="1150" as="sourcePoint"/>
+                        <mxPoint x="1640" y="1150" as="targetPoint"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="wm-footer-text" value="© 2026 Tesserix · Authored by Samyak Rout · blog.tesserix.app · All rights reserved" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#424242;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="60" y="1158" width="980" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="wm-footer-meta" value="github.com/tesserix · contact: samyak.rout@gmail.com" style="text;html=1;align=right;verticalAlign=middle;fontSize=11;fontColor=#757575;fontStyle=2;fontFamily=Helvetica;" parent="1" vertex="1">
+                    <mxGeometry x="1040" y="1158" width="600" height="24" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
 </mxfile>

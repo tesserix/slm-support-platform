@@ -1,0 +1,259 @@
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+#slm-blog { font-family: 'Inter', system-ui, sans-serif; font-size: 17px; line-height: 1.7; color: #444; }
+#slm-blog h1 { font-family: 'Fraunces', Georgia, serif; font-weight: 700; font-size: 48px; line-height: 1.1; letter-spacing: -0.02em; margin: 20px 0 14px; color: #1a1a1a; }
+#slm-blog h2 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 28px; line-height: 1.25; letter-spacing: -0.01em; margin: 52px 0 14px; color: #1a1a1a; }
+#slm-blog h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 20px; margin: 32px 0 10px; color: #1a1a1a; }
+#slm-blog p { margin: 0 0 16px; color: #444; }
+#slm-blog strong { color: #1a1a1a; font-weight: 600; }
+#slm-blog em { font-style: italic; }
+#slm-blog a { color: #2a7d6b; }
+#slm-blog ul { padding-left: 22px; margin: 0 0 18px; }
+#slm-blog ul li { margin: 0 0 6px; color: #444; }
+
+#slm-blog blockquote { border-left: 3px solid #2a7d6b; padding: 10px 24px; margin: 28px 0; background: #eef6f3; border-radius: 0 6px 6px 0; }
+#slm-blog blockquote p { margin: 0; font-family: 'Fraunces', Georgia, serif; font-size: 18px; color: #1a1a1a; font-style: italic; line-height: 1.5; }
+
+#slm-blog code { font-family: 'JetBrains Mono', monospace; font-size: 0.9em; background: #eef0ed; padding: 2px 6px; border-radius: 4px; color: #1a1a1a; }
+
+#slm-blog table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 15px; }
+#slm-blog th { text-align: left; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: #666; padding: 10px 12px; border-bottom: 2px solid #e6e3dd; }
+#slm-blog td { padding: 10px 12px; border-bottom: 1px solid #ece9e2; color: #333; vertical-align: top; }
+
+#slm-blog .diagram-wrap { margin: 28px 0; padding: 20px; background: #fafaf5; border: 1px solid #e6e3dd; border-radius: 10px; text-align: center; }
+#slm-blog .diagram-cap { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: #666; margin-top: 10px; }
+</style>
+<section id="slm-blog">
+
+<span style="display:inline-block;font-family:'JetBrains Mono',monospace;font-size:12px;text-transform:uppercase;letter-spacing:0.15em;color:#2a7d6b;background:#d8ebe4;padding:6px 12px;border-radius:20px;margin-bottom:16px;">AI · Architecture</span>
+
+<h1>Small Language Models — and why we built one</h1>
+
+<p style="font-family:'Fraunces',Georgia,serif;font-size:20px;line-height:1.45;color:#555;font-style:italic;margin:0 0 28px;">Three different Tesserix products. One chatbot. Behind the curtain, the same small model — wearing a different hat each time. Here is how we put it together, and why, for what we actually do all day, a smaller model made more sense than the frontier one.</p>
+
+<div style="margin:0 0 28px;padding:18px 22px;background:#fafaf5;border-left:4px solid #2a7d6b;border-radius:0 8px 8px 0;">
+<p style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.15em;color:#2a7d6b;margin:0 0 10px;">A scene we kept replaying</p>
+<p style="margin:0 0 12px;color:#444;">A customer on <strong>mark8ly</strong> opens the chat widget and types "where is my order?". A chef on <strong>HomeChef</strong> asks "when will my payout settle?". A player on <strong>FanZone</strong> wants to know "how do I redeem my reward?". Three different products, three different teams, three different vocabularies. Today our products are still in their early days, so most of those questions go to a human. That works at our current volume, and won't as it grows. The repetitive, well-shaped ones — the bulk of the queue — shouldn't really be a human's problem.</p>
+<p style="margin:0;color:#444;">So we are building one chat experience to handle that repetitive layer. Not by reaching for a frontier cloud model every time someone asks "where is my order" — that gets expensive and slow before we even have meaningful volume — but by running our own <em>small</em> model, shaped for our products. This is the story of that decision.</p>
+</div>
+
+<h2>So, what is an SLM?</h2>
+
+<p>A <strong>language model</strong> is a function with one job: you give it some text, and it predicts the next word. That's it. Everything else — chat, agents, code completion, the whole circus — is built on top of that one trick, repeated very fast.</p>
+
+<p>An <strong>SLM</strong> is a <em>Small</em> Language Model. There's no strict industry cutoff for what counts as "small" — different teams draw the line differently. A common working range is roughly <strong>a few hundred million up to about 7–10B parameters</strong>. Some rough buckets that help us reason about it:</p>
+
+<table>
+<thead><tr><th>Class</th><th>Parameter count (rough)</th><th>Examples</th><th>Where it tends to run</th></tr></thead>
+<tbody>
+<tr><td>Tiny (educational)</td><td>1M — 100M</td><td>nanoGPT, our Phase 1 build</td><td>One laptop</td></tr>
+<tr><td><strong>Small (SLM)</strong></td><td><strong>~100M — ~10B</strong></td><td><strong>Llama 3.2 (1B / 3B), Phi-3-mini (3.8B), Mistral 7B (7.3B), Gemma (2B / 7B / 9B)</strong></td><td><strong>One mid-range GPU, sometimes CPU</strong></td></tr>
+<tr><td>Medium</td><td>~10B — 70B</td><td>Llama-3-8B, Gemma 2 (27B), Mixtral 8x7B</td><td>A few A100s</td></tr>
+<tr><td>Large (frontier)</td><td>70B — 1T+</td><td>GPT-4 class, Claude, Gemini Ultra</td><td>Someone else's data centre</td></tr>
+</tbody>
+</table>
+
+<p>The boundaries are soft — Gemma 2 9B is "medium" by our table but plenty of teams ship it as their "small" model. For our purposes, "SLM" means roughly <strong>1B–4B parameters</strong>. Small enough that it fits on a single modest GPU inside our own Kubernetes cluster. Big enough that, with the right training and the right helpers, it can hold a useful support conversation.</p>
+
+<h2>Why small, when GPT-4 is right there?</h2>
+
+<p>We didn't pick a smaller model because it was trendy. We picked it because the frontier-model workflow was heavier than the shape of the work we actually needed to do, again and again. Most of our prompts are narrow, structured, and product-specific — "where is my HomeChef order", "how do I redeem this FanZone reward". Sending every one of them to a frontier API gave us more capability than the task needed, with higher cost, more latency, and less control over the execution path. A smaller model, fine-tuned for our domain and run close to the product, fit the work better.</p>
+
+<p>To answer the obvious follow-up: we did not train a frontier model from scratch, and we did not distill one. We took an open-weight base — <strong>Qwen2.5-1.5B in int4</strong>, with <strong>Phi-3-mini</strong> as a tested fallback — and LoRA-fine-tuned it on our own support transcripts and product docs. We serve it with <code>llama.cpp</code>, CPU-first, with an optional L4 GPU when we need more throughput. Then we put two helpers in front of it: a per-tenant RAG layer for current facts, and per-product MCP servers for safe tool calls into our existing APIs.</p>
+
+<p>What that buys us in practice: a chatbot whose per-message cost is roughly constant rather than per-token-billed, latency we measure inside the cluster instead of guessing from a third party, customer data that doesn't have to leave our environment for inference, and behaviour we can change ourselves — retraining the LoRA, updating a doc, or swapping a tool — without writing yet another prompt-engineering workaround.</p>
+
+<p>A 3B model is <em>not</em> as broadly capable as GPT-4 — it won't write you a sonnet about French monetary policy. For a narrow, well-scoped task it can be more predictable and a lot cheaper to run, which is the trade we're optimising for.</p>
+
+<table>
+<thead><tr><th></th><th>Big cloud LLM (GPT-4, Claude)</th><th>Our own SLM</th></tr></thead>
+<tbody>
+<tr><td>Indicative cost per question</td><td>~$0.01–0.10</td><td>~$0.0001 (self-hosted)</td></tr>
+<tr><td>Indicative latency</td><td>1–3 seconds (over the internet)</td><td>Hundreds of ms (in our cluster)</td></tr>
+<tr><td>Where customer data flows</td><td>To the third-party API</td><td>Stays inside our cluster by default</td></tr>
+<tr><td>Knows your product vocabulary</td><td>Only what you paste into the prompt</td><td>Yes, baked in by fine-tuning</td></tr>
+<tr><td>You can fix it when it's wrong</td><td>Re-word the prompt and hope</td><td>Retrain, add a tool, swap the retriever</td></tr>
+</tbody>
+</table>
+
+<p>The numbers above are rough public-rate estimates, not Tesserix-specific benchmarks. Self-hosting also doesn't <em>automatically</em> guarantee privacy — what it does mean is that we control where the data goes, and customer messages don't have to leave our environment for inference unless we choose to send them out. For a product handling order IDs, addresses, and payment context, that control matters.</p>
+
+<p>Our products are still in their incubation phase, so we are not pretending to have millions of messages a month yet. The point is the <em>shape</em> of the bill, not the number on it today. Hosted-LLM costs scale linearly with adoption — the moment one of these products starts working, that line item turns into a problem. Standing up our own small model now means the per-message cost curve grows a lot more slowly, and we can keep customer data — order IDs, addresses, payment context — inside our own VPC rather than sending it to a third party. We expect to spend less and learn more, while still giving the user the right answer they came for.</p>
+
+<blockquote><p>The case for the small model isn't "as good as GPT-4". It's "good enough at <em>our</em> job, in <em>our</em> cluster, at latency and cost we can actually afford to repeat".</p></blockquote>
+
+<h2>A pocket assistant, not a cloud genius</h2>
+
+<p>A useful way to picture this. Calling a hosted LLM is like ringing a brilliant generalist on a satellite phone every time you have a question. They are smart, but also expensive, far away, and you have to re-explain your company at the start of every call.</p>
+
+<p>A small language model is the opposite shape. Think of it as a <strong>personal assistant who already works at your company</strong>. They have read your handbook. They know your products by name. They sit at the desk next to you. They answer in seconds, in our voice, without phoning anyone outside the building. They won't write you a poem about French monetary policy — but for the job we hired them for, they are quick, cheap, and ours.</p>
+
+<p>And because they are small, they fit in surprising places. The same model weights can run on an iPhone's neural engine, a Mac laptop, a Raspberry Pi 5, a single mid-range GPU in our cluster, or a plain CPU server if we're patient. With the right quantisation and runtime, an SLM is portable in a way a 400B-parameter model isn't. We don't need that flexibility today, but it changes the architecture: when the right answer is "run this closer to the product", we have the option, instead of being locked into one provider's region.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 760 290" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="The same SLM weights running on a phone, a laptop, a Raspberry Pi, a single GPU, and a CPU server." style="max-width:100%;height:auto;">
+  <rect x="0" y="0" width="760" height="290" fill="#fafaf5"/>
+
+  <rect x="290" y="14" width="180" height="58" rx="10" fill="#d8ebe4" stroke="#2a7d6b" stroke-width="1.5"/>
+  <text x="380" y="40" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#1a1a1a">one SLM, one .gguf file</text>
+  <text x="380" y="58" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">quantised weights, ~1–4 GB on disk</text>
+
+  <line x1="320" y1="72" x2="80" y2="140" stroke="#999" stroke-width="1.2"/>
+  <line x1="350" y1="72" x2="220" y2="140" stroke="#999" stroke-width="1.2"/>
+  <line x1="380" y1="72" x2="380" y2="140" stroke="#999" stroke-width="1.2"/>
+  <line x1="410" y1="72" x2="540" y2="140" stroke="#999" stroke-width="1.2"/>
+  <line x1="440" y1="72" x2="680" y2="140" stroke="#999" stroke-width="1.2"/>
+
+  <!-- phone -->
+  <rect x="30" y="140" width="100" height="120" rx="10" fill="#fff" stroke="#cfd6d2"/>
+  <rect x="46" y="156" width="68" height="80" rx="4" fill="#eef0ed"/>
+  <circle cx="80" cy="248" r="3.5" fill="#cfd6d2"/>
+  <text x="80" y="278" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">phone</text>
+
+  <!-- laptop -->
+  <rect x="170" y="140" width="100" height="120" rx="10" fill="#fff" stroke="#cfd6d2"/>
+  <rect x="184" y="160" width="72" height="50" rx="3" fill="#eef0ed"/>
+  <rect x="178" y="212" width="84" height="6" rx="2" fill="#cfd6d2"/>
+  <text x="220" y="278" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">laptop</text>
+
+  <!-- Raspberry Pi -->
+  <rect x="330" y="140" width="100" height="120" rx="10" fill="#fff" stroke="#cfd6d2"/>
+  <rect x="346" y="160" width="68" height="68" rx="3" fill="#eef0ed"/>
+  <circle cx="356" cy="170" r="2.5" fill="#cfd6d2"/>
+  <circle cx="404" cy="170" r="2.5" fill="#cfd6d2"/>
+  <circle cx="356" cy="218" r="2.5" fill="#cfd6d2"/>
+  <circle cx="404" cy="218" r="2.5" fill="#cfd6d2"/>
+  <text x="380" y="278" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">Raspberry Pi</text>
+
+  <!-- single GPU box -->
+  <rect x="490" y="140" width="100" height="120" rx="10" fill="#fff" stroke="#cfd6d2"/>
+  <rect x="504" y="160" width="72" height="20" rx="2" fill="#eef0ed"/>
+  <rect x="504" y="184" width="72" height="20" rx="2" fill="#eef0ed"/>
+  <rect x="504" y="208" width="72" height="20" rx="2" fill="#eef0ed"/>
+  <text x="540" y="278" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">single GPU (cluster)</text>
+
+  <!-- CPU server -->
+  <rect x="630" y="140" width="100" height="120" rx="10" fill="#fff" stroke="#cfd6d2"/>
+  <rect x="644" y="160" width="72" height="68" rx="3" fill="#eef0ed"/>
+  <text x="680" y="200" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#999">CPU</text>
+  <text x="680" y="278" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">CPU-only server</text>
+</svg>
+<div class="diagram-cap">Same weights, very different hardware</div>
+</div>
+
+<p>The same portability story applies to the bit <em>in front</em> of the model — the <strong>gateway</strong>. Otto and <code>slm-router</code> are plain Go services that speak HTTP and WebSockets. Nothing in them is bound to GKE; we run them there because that is where the rest of Tesserix lives. The same pair could run in a Docker Compose stack on a developer laptop, on a small edge VM in a fast-region, or on-premise inside a customer's own network if that is ever a requirement. Small, boring services move easily.</p>
+
+<h2>The shape of our setup</h2>
+
+<p>Here is the picture. Three product websites, one chat widget, one shared chat service called <strong>Otto</strong>, one router, one model. The trick is what the router does in between.</p>
+
+<figure style="margin:28px 0;padding:0;text-align:center;">
+<img src="https://storage.googleapis.com/tesserix-blog-assets/blog/images/2026/05/6c2a5ad3b7a11f3432c56f78.svg" alt="SLM Support Platform — full system architecture. Three product sites (mark8ly, fanzone, HomeChef) flow through Next.js proxies and the Otto widget, hit Cloudflare and the Istio Ingress Gateway over ztunnel, then reach Otto (chat front-of-house) and slm-router (the gateway). slm-router orchestrates calls into slm-inference and the RAG stack (embedder, reranker, support-postgres with pgvector), and routes tool calls to per-product MCP servers which in turn call each product's APIs. Animated dashed arrows trace the live customer-message path." style="max-width:100%;height:auto;border:1px solid #e6e3dd;border-radius:10px;background:#fafaf5;padding:14px;"/>
+<figcaption style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#666;margin-top:10px;">System architecture — one pipeline, three tenants</figcaption>
+</figure>
+
+<p>The widget on each site is the same React component, just wearing the product's colours. It posts the customer's message to <strong>Otto</strong>, our chat service. Otto stores the thread and streams replies over a WebSocket — pretty much like any modern chat app.</p>
+
+<p>What is new is the bit behind Otto: <strong>slm-router</strong>. Every time a customer types something, the router wakes up, looks at which tenant the message came from, and stitches together a prompt for the model. The model itself — <code>slm-inference</code> — is just one service, one set of weights, one GPU.</p>
+
+<h2>One model, three different "personalities"</h2>
+
+<p>This is the part that confuses people, and it's also the part that makes the whole thing cheap to run.</p>
+
+<p>We don't train three separate models, one per product. That would be expensive and a maintenance nightmare. We train <em>one</em> SLM that has been taught how to <strong>speak the Tesserix way</strong>: polite, concise, never invents an order number. Then we hand it three different things at runtime:</p>
+
+<ul>
+<li>A <strong>system prompt</strong> — "you're the support bot for HomeChef" vs "you're the support bot for FanZone"</li>
+<li>A <strong>RAG namespace</strong> — a private little library of <em>that product's</em> docs to read from</li>
+<li>A set of <strong>MCP tools</strong> — code endpoints the model is allowed to call to look up real data on <em>that product's</em> APIs</li>
+</ul>
+
+<p>Same brain, three different desks. The HomeChef desk has the HomeChef chef handbook on it and a "lookup_order" button wired to the HomeChef API. The mark8ly desk has the storefront FAQ and the mark8ly order service. The model never sees the other two desks. That's what gives each product its own voice without us shipping three models.</p>
+
+<div class="diagram-wrap">
+<svg viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="One SLM serving three tenants. Each tenant gets its own system prompt, RAG namespace, and MCP server." style="max-width:100%;height:auto;">
+  <rect x="0" y="0" width="720" height="250" fill="#fafaf5"/>
+
+  <rect x="280" y="20" width="160" height="56" rx="10" fill="#d8ebe4" stroke="#2a7d6b" stroke-width="1.5"/>
+  <text x="360" y="46" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="600" fill="#1a1a1a">one SLM</text>
+  <text x="360" y="64" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">~1B–4B params, fine-tuned</text>
+
+  <line x1="320" y1="76" x2="130" y2="130" stroke="#999" stroke-width="1.2"/>
+  <line x1="360" y1="76" x2="360" y2="130" stroke="#999" stroke-width="1.2"/>
+  <line x1="400" y1="76" x2="590" y2="130" stroke="#999" stroke-width="1.2"/>
+
+  <rect x="40" y="130" width="180" height="92" rx="8" fill="#fff" stroke="#cfd6d2"/>
+  <text x="130" y="152" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">mark8ly</text>
+  <text x="130" y="172" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">storefront-faq, admin docs</text>
+  <text x="130" y="188" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">→ mark8ly-mcp</text>
+  <text x="130" y="208" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#666">tenant_id = mark8ly</text>
+
+  <rect x="270" y="130" width="180" height="92" rx="8" fill="#fff" stroke="#cfd6d2"/>
+  <text x="360" y="152" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">fanzone</text>
+  <text x="360" y="172" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">game-rules, rewards</text>
+  <text x="360" y="188" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">→ fanzone-mcp</text>
+  <text x="360" y="208" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#666">tenant_id = fanzone</text>
+
+  <rect x="500" y="130" width="180" height="92" rx="8" fill="#fff" stroke="#cfd6d2"/>
+  <text x="590" y="152" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="600" fill="#1a1a1a">homechef</text>
+  <text x="590" y="172" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">chef-faq, payouts, delivery</text>
+  <text x="590" y="188" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" fill="#444">→ homechef-mcp</text>
+  <text x="590" y="208" text-anchor="middle" font-family="JetBrains Mono, monospace" font-size="10" fill="#666">tenant_id = homechef</text>
+</svg>
+<div class="diagram-cap">Same model, three sets of context</div>
+</div>
+
+<p>Adding a fourth product later — say, <code>stockpilot</code> — doesn't need a new model. It needs a new RAG namespace, a new MCP server, and a few lines of router config. That's a one-week onboarding instead of a one-quarter retraining.</p>
+
+<h2>Where this is actually useful</h2>
+
+<p>Three short walk-throughs, one per product. The bot handles each on its own, no human in the loop unless something goes wrong.</p>
+
+<h3>mark8ly — "where is my order?"</h3>
+<p>Router picks the <code>mark8ly</code> prompt. RAG pulls the shipping policy. The model emits a tool call — <code>lookup_order(order_id="…")</code> — the mark8ly MCP server hits the order service, and the result lands back in context. Reply: <em>"Your order #4821 left our warehouse on Tuesday and should arrive by Friday."</em> Under a second.</p>
+
+<h3>fanzone — "how do I claim my Battle Pass reward?"</h3>
+<p>Router picks <code>fanzone</code>. RAG pulls the rewards-flow doc. No tool call needed — this is a "how-do-I", not "look up my data". The model answers in the voice fine-tuning taught it: short, gamer-friendly, no fluff.</p>
+
+<h3>HomeChef — "when will my payout settle?"</h3>
+<p>Router picks <code>homechef</code>, RAG pulls the payouts policy, and a tool call hits the HomeChef finance API for that chef's pending settlement. The model replies with a real date and amount. If the API is down, the bot does not guess — it hands the conversation to a human.</p>
+
+<figure style="margin:32px 0;padding:0;text-align:center;">
+<img src="https://storage.googleapis.com/tesserix-blog-assets/blog/images/2026/05/5f351d3c52829b4356509826.svg" alt="Customer request flow — swim-lane diagram of one chat message travelling end to end. The customer types ‘where is my order?’; it goes through the chat widget, support-bff, the router and orchestrator, RAG with vector DB, the SLM, the MCP client, then the homechef-mcp and homechef-api; the response streams back to the customer." style="max-width:100%;height:auto;border:1px solid #e6e3dd;border-radius:10px;background:#fafaf5;padding:14px;"/>
+<figcaption style="font-family:'JetBrains Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.12em;color:#666;margin-top:10px;">One chat message, end to end — solid arrows = forward path, dashed = response</figcaption>
+</figure>
+
+<h2>The tech, in three layers</h2>
+
+<p>Strip the framing away and the whole thing is three layers, stacked carefully.</p>
+
+<p><strong>Layer 1 — the model.</strong> A decoder-only transformer, same architecture family as GPT and Llama, just smaller. We start with an open-weight base (Qwen2.5-1.5B or Phi-3-mini) and fine-tune with <strong>LoRA</strong> on Tesserix-style support transcripts. LoRA only trains a few million weights on the side instead of all 1.5B — cheap to train, easy to swap.</p>
+
+<p><strong>Layer 2 — retrieval (RAG).</strong> Every product's docs get chunked, embedded, and stored in a vector database with a per-product namespace. At runtime the router pulls the few chunks closest in meaning to the question and pastes them into the prompt. The model never sees the whole corpus, just the relevant page. Change a doc, the next chat sees the new version.</p>
+
+<p><strong>Layer 3 — tools (MCP).</strong> The model cannot decide a Razorpay payout. But it can <em>ask</em>. Each product exposes an MCP (Model Context Protocol) server with a small list of safe, read-mostly tools — <code>get_order</code>, <code>get_chef_payout</code>, <code>get_user_rewards</code>. The router executes the call, the server hits the product API, the answer flows back. The model never holds a database password; the product's existing auth and RBAC do the gatekeeping.</p>
+
+<p>In front of all of that sits <strong>Otto</strong>, a generic real-time chat service we already had — originally built for mark8ly, now multi-tenanted. The widget, the thread history, the handoff-to-human are all Otto. The model and the router are just one more participant in the conversation.</p>
+
+<h2>What it won't do</h2>
+
+<p>We should be honest about the trade. A 3B SLM can be a good fit for the narrow job we train it for. It is <em>not</em> a know-it-all, and it does not magically stop hallucinating just because it is small — it can still get things wrong. The places it falls down, and what we do about it:</p>
+
+<ul>
+<li><strong>General or rare knowledge.</strong> Ask it the capital of Australia, or anything outside our docs, and it may well make something up. We scope the bot to product support, lean on RAG for current facts, and when even RAG has nothing the bot says so rather than guessing.</li>
+<li><strong>Long chains of reasoning.</strong> "If A, but only when B unless C" breaks small models. We keep tool calls short and rely on the agent layer for control flow, not the model's head.</li>
+<li><strong>Anything risky.</strong> Refunds, allergic-reaction complaints, threats of legal action — the router has an escalation list. Match any of those, and the conversation goes straight to the staff inbox with the SLM staying out of the way.</li>
+</ul>
+
+<p>The bot's job is the predictable, narrow stuff. Anything outside that goes to a human, who is still better at the messy parts.</p>
+
+<h2>Where this is going</h2>
+
+<p>We're rolling this out in three phases. Phase 1 is the educational one — building a tiny transformer from scratch so we understand every line, no black boxes. Phase 2 takes an open-weight SLM and makes it production-ready: LoRA fine-tune, KV cache, quantisation, a proper retrieval stack with a reranker. Phase 3 wires it into Otto and ships it to mark8ly first, then FanZone, then HomeChef.</p>
+
+<p>The whole stack fits on our existing GKE cluster and runs next to the rest of our services. It's a predictable line item, not a usage-priced one — which matters more than raw cost while we're still learning what each product actually needs. The question we keep coming back to isn't "is it as capable as GPT-4?" — for general tasks it plainly isn't — but "is it predictable and cheap enough for our narrow job, on our terms?". For where Tesserix is today, our answer is yes.</p>
+
+<blockquote><p>One brain. Three desks. The customer sees a chatbot that knows their product. We see a model that's small enough to own, fine-tune, and afford. That's the trade we're making.</p></blockquote>
+
+</section>
