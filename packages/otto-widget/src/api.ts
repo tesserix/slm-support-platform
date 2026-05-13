@@ -62,7 +62,22 @@ export interface OttoApi {
  * In the admin app — or any future host — swap the base and the calls work
  * identically.
  */
-export function buildOttoApi(baseUrl: string, tenantId?: string): OttoApi {
+export interface OttoApiIdentity {
+  /** Stable per-user id from the host app (e.g. firebase uid).
+   *  Forwarded as `X-Client-User-Id` so the storefront proxy can skip
+   *  the OTP step for logged-in users. */
+  userId?: string;
+  /** Logged-in user's email — forwarded as `X-Client-User-Email`. */
+  email?: string;
+  /** Display name — forwarded as `X-Client-User-Name`. */
+  name?: string;
+}
+
+export function buildOttoApi(
+  baseUrl: string,
+  tenantId?: string,
+  identity?: OttoApiIdentity,
+): OttoApi {
   const base = baseUrl.replace(/\/+$/, "");
   // X-Tenant-ID lets the backend route the request to the per-product
   // SLM and MCP knowledge base. Set by the host app from a stable
@@ -70,14 +85,22 @@ export function buildOttoApi(baseUrl: string, tenantId?: string): OttoApi {
   // omitted the backend falls back to its default tenant (mark8ly's
   // marketplace shape) — which is why every non-marketplace product
   // MUST pass tenantId explicitly.
-  const tenantHeader: Record<string, string> = tenantId
-    ? { "X-Tenant-ID": tenantId }
-    : {};
+  //
+  // X-Client-User-* headers carry the logged-in customer's identity
+  // through the storefront proxy. The proxy re-emits them as
+  // X-User-* headers Otto's CustomerContext middleware reads, which
+  // skips the OTP step entirely. Anonymous customers leave these
+  // unset — they go through email + OTP.
+  const baseHeaders: Record<string, string> = {};
+  if (tenantId) baseHeaders["X-Tenant-ID"] = tenantId;
+  if (identity?.userId) baseHeaders["X-Client-User-Id"] = identity.userId;
+  if (identity?.email) baseHeaders["X-Client-User-Email"] = identity.email;
+  if (identity?.name) baseHeaders["X-Client-User-Name"] = identity.name;
   const post = async <T,>(path: string, body?: unknown): Promise<T> => {
     const res = await fetch(`${base}${path}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json", ...tenantHeader },
+      headers: { "Content-Type": "application/json", ...baseHeaders },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) throw await toError(res);
@@ -86,7 +109,7 @@ export function buildOttoApi(baseUrl: string, tenantId?: string): OttoApi {
   const get = async <T,>(path: string): Promise<T> => {
     const res = await fetch(`${base}${path}`, {
       credentials: "include",
-      headers: tenantHeader,
+      headers: baseHeaders,
     });
     if (!res.ok) throw await toError(res);
     return (await res.json()) as T;

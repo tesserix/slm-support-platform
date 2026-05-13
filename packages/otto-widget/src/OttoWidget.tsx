@@ -72,10 +72,20 @@ export interface OttoWidgetProps {
   intro?: string;
   /** Optional customer name prefill (for logged-in users). When both
    *  name and email are provided the OTP step is skipped entirely — the
-   *  host has already vouched for the identity. */
+   *  host has already vouched for the identity. Forwarded as
+   *  `X-Client-User-Name` on every Otto REST call so the storefront
+   *  proxy can re-emit it as `X-User-Name` for Otto's CustomerContext. */
   customerName?: string;
-  /** Optional customer email prefill. */
+  /** Optional customer email prefill. Forwarded as
+   *  `X-Client-User-Email` so the storefront proxy can skip OTP for
+   *  already-authenticated visitors. */
   customerEmail?: string;
+  /** Optional stable per-user id from the host app (e.g. firebase uid,
+   *  Keycloak sub, Auth.js id). When set, forwarded as
+   *  `X-Client-User-Id` — the storefront proxy needs this to mark the
+   *  Otto conversation as belonging to the logged-in customer rather
+   *  than starting an anonymous OTP flow. */
+  customerId?: string;
   /** Optional style override (position, offsets, z-index). */
   style?: CSSProperties;
   /** Optional theme — maps to CSS custom properties. */
@@ -139,6 +149,7 @@ export function OttoWidget({
   intro = "Leave a message and someone from our team will be with you shortly. You'll see their reply here in real time.",
   customerName,
   customerEmail,
+  customerId,
   style,
   theme,
   reasons = DEFAULT_REASON_OPTIONS,
@@ -146,8 +157,13 @@ export function OttoWidget({
   tenantId,
 }: OttoWidgetProps) {
   const api = useMemo(
-    () => buildOttoApi(apiBaseUrl, tenantId),
-    [apiBaseUrl, tenantId],
+    () =>
+      buildOttoApi(apiBaseUrl, tenantId, {
+        userId: customerId,
+        email: customerEmail,
+        name: customerName,
+      }),
+    [apiBaseUrl, tenantId, customerId, customerEmail, customerName],
   );
   // Look up DOB requirement off the configured reasons list — every
   // product can mark its own "needs an account lookup" reasons.
