@@ -735,7 +735,10 @@ export function OttoWidget({
                     (!isLoggedIn && !email.trim()) ||
                     !pendingMessage.trim() ||
                     !reason ||
-                    !statusInfo.trim() ||
+                    // Quick-ask reasons (requiresStatus: false) skip the
+                    // status field entirely — only enforce it when the
+                    // selected reason actually requires it.
+                    (reasonRequiresStatus(reason || "") && !statusInfo.trim()) ||
                     (reasonRequiresDob(reason || "") && !dob.trim())
                   }
                 >
