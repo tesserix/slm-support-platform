@@ -297,7 +297,20 @@ export function OttoWidget({
     const tick = async () => {
       try {
         const snap = await api.queueStatus(id);
-        if (!cancelled) setQueue(snap);
+        if (cancelled) return;
+        setQueue(snap);
+        // Status flipped server-side (AI replied → active, staff
+        // accepted → active, or sweeper closed it). Re-fetch the
+        // conversation so local state matches and the queue overlay
+        // disappears even if the WebSocket update event was missed.
+        if (snap.status && snap.status !== "pending") {
+          try {
+            const fresh = await api.getConversation(id);
+            if (!cancelled) setConversation(fresh.conversation);
+          } catch {
+            /* ignore — next tick will retry */
+          }
+        }
       } catch {
         /* transient error — keep previous snapshot */
       }

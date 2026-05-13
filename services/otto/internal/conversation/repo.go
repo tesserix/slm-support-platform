@@ -313,20 +313,28 @@ func (r *Repository) QueuePosition(ctx context.Context, tenantID, storeID, id st
 	if self.Status != StatusPending {
 		return QueueSnapshot{Position: 0, TotalPending: 0, EstimatedWait: 0}, nil
 	}
+	// "Queue position" should only count conversations actually waiting
+	// for a HUMAN agent — i.e. pending AND needs_human=true. AI-handled
+	// conversations (needs_human=false) live in `pending` until the SLM
+	// flips them to `active` on first reply, but they're not in the
+	// staff queue, so showing "you are #6, 15 min wait" while the AI is
+	// composing the answer is misleading.
 	base := bson.M{
-		"tenant_id": tenantID,
-		"store_id":  storeID,
-		"status":    StatusPending,
+		"tenant_id":   tenantID,
+		"store_id":    storeID,
+		"status":      StatusPending,
+		"needs_human": true,
 	}
 	total, err := r.coll.CountDocuments(ctx, base)
 	if err != nil {
 		return QueueSnapshot{}, err
 	}
 	ahead, err := r.coll.CountDocuments(ctx, bson.M{
-		"tenant_id":  tenantID,
-		"store_id":   storeID,
-		"status":     StatusPending,
-		"created_at": bson.M{"$lt": self.CreatedAt},
+		"tenant_id":   tenantID,
+		"store_id":    storeID,
+		"status":      StatusPending,
+		"needs_human": true,
+		"created_at":  bson.M{"$lt": self.CreatedAt},
 	})
 	if err != nil {
 		return QueueSnapshot{}, err
