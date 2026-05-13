@@ -92,6 +92,52 @@ def _not_implemented(tool: str, reason: str) -> dict[str, Any]:
     }
 
 
+def _check_range(days: Any, max_days: int) -> dict[str, Any] | int:
+    """Validate a customer-specified `days` window for history tools.
+
+    Returns either a clamped int (when within bounds) or a structured
+    `range_exceeded` error the SLM will surface back as a ticket
+    suggestion. The exact `_action_for_assistant` text mirrors what's
+    in the universal response rules so the SLM stays consistent.
+    """
+    try:
+        d = int(days)
+    except (TypeError, ValueError):
+        d = 7
+    if d < 1:
+        d = 1
+    if d > max_days:
+        return {
+            "error": "range_exceeded",
+            "requested_days": d,
+            "max_days": max_days,
+            "_action_for_assistant": (
+                f"Tell the customer: 'I can only break this down for the last "
+                f"{max_days} days here. For anything longer, please raise a "
+                f"support ticket and the team will pull the full record.' "
+                f"Do NOT fabricate any values for the longer window."
+            ),
+        }
+    return d
+
+
+def _entry_ts(entry: dict[str, Any]) -> datetime | None:
+    """Best-effort ISO8601 parse off whichever timestamp field the
+    backend uses. Returns None when nothing parses cleanly."""
+    for key in (
+        "created_at", "createdAt", "timestamp", "at",
+        "placed_at", "occurred_at", "ts", "date",
+    ):
+        raw = entry.get(key)
+        if not raw:
+            continue
+        try:
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+    return None
+
+
 def _now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
@@ -144,6 +190,26 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             "mark8ly mp-payment service has no public lookup endpoint yet.",
         ) | {"gateway_reference": gateway_reference}
 
+    @mcp.tool(
+        name="list_recent_orders",
+        description=(
+            "List a customer's mark8ly orders placed in the last N days. "
+            "days defaults to 30, MAX 90. If the customer asks for a longer "
+            "window the tool returns range_exceeded — surface that and ask "
+            "them to raise a support ticket. Pass store_slug if known."
+        ),
+    )
+    async def list_recent_orders(email: str, days: int = 30, store_slug: str = "tesserix-store") -> dict[str, Any]:
+        clamped = _check_range(days, max_days=90)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "mp-orders"}
+        return await _get_json(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{store_slug}/orders",
+            source="mp-orders",
+            params={"customer_email": email, "since_days": clamped, "limit": 50},
+        )
+
 
 # ---------------------------------------------------------------------------
 # fanzone — cricket fan platform
@@ -163,6 +229,61 @@ def _register_fanzone(mcp, cfg: Config) -> None:
             f"/api/v1/users/{user_id}/points",
             source="fanzone-user",
         )
+
+    @mcp.tool(
+        name="get_points_history",
+        description=(
+            "Daily breakdown of a user's points activity over the last "
+            "N days. Pass days=7 by default, max 14. If the customer asks "
+            "for MORE THAN 14 days the tool returns a 'range_exceeded' "
+            "error — surface that to the customer and ask them to open a "
+            "support ticket instead of guessing values."
+        ),
+    )
+    async def get_points_history(user_id: str, days: int = 7) -> dict[str, Any]:
+        clamped = _check_range(days, max_days=14)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "fanzone-user"}
+        result = await _get_json(
+            cfg.fanzone_user_url,
+            f"/api/v1/users/{user_id}/points/history",
+            source="fanzone-user",
+            params={"limit": 100},
+        )
+        if "error" in result:
+            return result
+        from datetime import timedelta as _td
+        cutoff = _now() - _td(days=clamped)
+        days = clamped
+        entries = result.get("entries") or []
+        buckets: dict[str, dict[str, int]] = {}
+        in_window = 0
+        for entry in entries:
+            ts = _entry_ts(entry)
+            if ts is None or ts < cutoff:
+                continue
+            day = ts.date().isoformat()
+            slot = buckets.setdefault(day, {"earned": 0, "spent": 0, "net": 0})
+            # Best-effort field shape from the GORM ledger row.
+            amt_int = int(entry.get("amount") or entry.get("points") or 0)
+            kind = (entry.get("type") or entry.get("kind") or "").lower()
+            if amt_int >= 0 and "spen" not in kind:
+                slot["earned"] += amt_int
+            else:
+                slot["spent"] += abs(amt_int)
+            slot["net"] += amt_int if "spen" not in kind else -abs(amt_int)
+            in_window += 1
+        # Oldest first so the SLM can summarise chronologically.
+        days_sorted = sorted(buckets.keys())
+        return {
+            "user_id": user_id,
+            "days_requested": days,
+            "entries_in_window": in_window,
+            "by_day": [
+                {"date": d, **buckets[d]} for d in days_sorted
+            ],
+            "source": "fanzone-user",
+        }
 
     @mcp.tool(
         name="get_match_info",
@@ -225,6 +346,25 @@ def _register_homechef(mcp, cfg: Config) -> None:
             source="homechef-api",
         )
 
+    @mcp.tool(
+        name="list_recent_orders",
+        description=(
+            "List a customer's HomeChef orders placed in the last N days. "
+            "days defaults to 14, MAX 30. range_exceeded for longer windows "
+            "— surface that and ask the customer to raise a support ticket."
+        ),
+    )
+    async def list_recent_orders(user_id: str, days: int = 14) -> dict[str, Any]:
+        clamped = _check_range(days, max_days=30)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "homechef-api"}
+        return await _get_json(
+            cfg.homechef_api_url,
+            f"/api/v1/users/{user_id}/orders",
+            source="homechef-api",
+            params={"since_days": clamped, "limit": 50},
+        )
+
 
 # ---------------------------------------------------------------------------
 # stockpilot — AI stock analysis
@@ -273,6 +413,28 @@ def _register_stockpilot(mcp, cfg: Config) -> None:
             "stockpilot agent traces aren't exposed by trace_id; reports are by report_id only.",
         ) | {"symbol": symbol, "run_id": run_id}
 
+    @mcp.tool(
+        name="list_recent_trades",
+        description=(
+            "Trades on the user's account in the last N days. days defaults "
+            "to 7, MAX 30. Longer windows return range_exceeded — surface "
+            "that and ask the customer to raise a support ticket for the "
+            "full history."
+        ),
+    )
+    async def list_recent_trades(account_id: str, days: int = 7) -> dict[str, Any]:
+        clamped = _check_range(days, max_days=30)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "stockpilot-api", "_disclaimer": _DISCLAIMER}
+        result = await _get_json(
+            cfg.stockpilot_api_url,
+            f"/api/portfolios/{account_id}/trades",
+            source="stockpilot-api",
+            params={"since_days": clamped, "limit": 100},
+        )
+        result.setdefault("_disclaimer", _DISCLAIMER)
+        return result
+
 
 # ---------------------------------------------------------------------------
 # gameverse — multiplayer board games
@@ -303,13 +465,21 @@ def _register_gameverse(mcp, cfg: Config) -> None:
 
     @mcp.tool(
         name="get_match_history",
-        description="Recent matches for a user. NOT YET WIRED — no match-history endpoint.",
+        description=(
+            "Recent matches for a user in the last N days. days defaults "
+            "to 7, MAX 30 (anything longer asks the customer to open a "
+            "support ticket). NOT YET WIRED — gameverse-server stores "
+            "matches in PostgreSQL but doesn't expose them over HTTP."
+        ),
     )
-    async def get_match_history(user_id: str, limit: int = 5) -> dict[str, Any]:
+    async def get_match_history(user_id: str, days: int = 7) -> dict[str, Any]:
+        clamped = _check_range(days, max_days=30)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "gameverse-server"}
         return _not_implemented(
             "get_match_history",
             "gameverse-server stores matches in PostgreSQL but doesn't expose them over HTTP.",
-        ) | {"user_id": user_id}
+        ) | {"user_id": user_id, "days_requested": clamped}
 
 
 # ---------------------------------------------------------------------------
@@ -351,16 +521,26 @@ def _register_horoscope(mcp, cfg: Config) -> None:
 
     @mcp.tool(
         name="list_recent_readings",
-        description="Recent visual readings (palm/face/chart) on file for the user.",
+        description=(
+            "Recent visual readings (palm/face/chart) on file for the user. "
+            "Pass days to scope (default 30, MAX 60). Longer windows return "
+            "range_exceeded — surface that and ask the customer to raise a "
+            "support ticket."
+        ),
     )
-    async def list_recent_readings(user_id: str, limit: int = 3) -> dict[str, Any]:
-        return await _get_json(
+    async def list_recent_readings(user_id: str, days: int = 30, limit: int = 10) -> dict[str, Any]:
+        clamped = _check_range(days, max_days=60)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "horoscope-api", "_disclaimer": _DISCLAIMER}
+        result = await _get_json(
             cfg.horoscope_api_url,
             "/api/v1/me/readings/visual",
             source="horoscope-api",
-            params={"limit": max(1, min(limit, 25))},
+            params={"since_days": clamped, "limit": max(1, min(limit, 25))},
             headers={"X-User-Id": user_id} if user_id else None,
         )
+        result.setdefault("_disclaimer", _DISCLAIMER)
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -390,6 +570,26 @@ def _register_scrapper(mcp, cfg: Config) -> None:
             "/api/campaigns",
             source="scrapper-api",
             params={"limit": max(1, min(limit, 50))},
+        )
+
+    @mcp.tool(
+        name="list_recent_scrape_jobs",
+        description=(
+            "Scrape jobs created in the last N days. days defaults to 7, "
+            "MAX 30. Longer windows return range_exceeded — surface that "
+            "and ask the customer to raise a support ticket for the full "
+            "job history."
+        ),
+    )
+    async def list_recent_scrape_jobs(days: int = 7, limit: int = 50) -> dict[str, Any]:
+        clamped = _check_range(days, max_days=30)
+        if isinstance(clamped, dict):
+            return clamped | {"source": "scrapper-api"}
+        return await _get_json(
+            cfg.scrapper_api_url,
+            "/api/jobs",
+            source="scrapper-api",
+            params={"since_days": clamped, "limit": max(1, min(limit, 100))},
         )
 
     @mcp.tool(

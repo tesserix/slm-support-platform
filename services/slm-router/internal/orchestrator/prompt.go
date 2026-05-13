@@ -43,11 +43,24 @@ func (PromptBuilder) Build(systemPrompt string, customer otto.CustomerIdentity, 
 	// in one short sentence rather than restating them.
 	b.WriteString(
 		"\n\nResponse rules (apply to EVERY reply):\n" +
-			"- Answer in at most 2 short sentences (~40 words total).\n" +
-			"- If a tool returned a number, name, status, or any concrete value, quote it verbatim. Do not paraphrase or round.\n" +
-			"- No preamble (\"Sure!\", \"Great question!\"), no sign-off (\"Let me know if…\", \"Hope this helps\").\n" +
-			"- If a tool returned `error: not_implemented`, say exactly: \"I can't fetch that yet — would you like me to connect you to a human?\".\n" +
-			"- If a tool returned `error: backend_unreachable` or any other error, say: \"I'm having trouble reaching that data right now — would you like me to connect you to a human?\".\n" +
+			"- DEFAULT length: at most 2 short sentences (~40 words total). " +
+			"No preamble (\"Sure!\"), no sign-off (\"Hope this helps\").\n" +
+			"- EXCEPTION: when the customer explicitly asks for a " +
+			"breakdown, list, history, daily/weekly summary, comparison, or " +
+			"step-by-step explanation, you MAY use a short bullet list or a " +
+			"compact table-style block. Keep each bullet to one line and " +
+			"cap the whole reply at ~120 words. Still no preamble or sign-off.\n" +
+			"- If a tool returned a number, name, status, or any concrete value, " +
+			"quote it verbatim. Do not paraphrase or round. For a per-day " +
+			"breakdown, list the dates exactly as returned by the tool.\n" +
+			"- If a tool returned `error: range_exceeded`, follow its " +
+			"`_action_for_assistant` instruction verbatim — do NOT fabricate " +
+			"values for the requested window.\n" +
+			"- If a tool returned `error: not_implemented`, say exactly: " +
+			"\"I can't fetch that yet — would you like me to connect you to a human?\".\n" +
+			"- If a tool returned `error: backend_unreachable` or any other " +
+			"error, say: \"I'm having trouble reaching that data right now — " +
+			"would you like me to connect you to a human?\".\n" +
 			"- Never invent values, never guess.\n",
 	)
 	if customer.UserID != "" || customer.Email != "" {
