@@ -186,7 +186,12 @@ func (h *StorefrontHandler) create(c *gin.Context) {
 		})
 		return
 	}
-	if body.StatusInfo == "" {
+	// "Current status / one-line summary" is optional for quick-ask
+	// reasons (general_question) — those let a customer fire off a
+	// single message without a second free-text input. For every other
+	// reason the field is still required so staff opens the case with
+	// useful context.
+	if StatusRequiredFor(tenantID, body.Reason) && body.StatusInfo == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status_required"})
 		return
 	}

@@ -34,12 +34,19 @@ export interface ReasonOption {
   value: string;
   label: string;
   requiresDob?: boolean;
+  /** When false, the widget hides the "Current status / one-line
+   *  summary" field and the backend skips its check. Use this for
+   *  quick-ask reasons (general questions, FAQs) where the message
+   *  body alone is enough context. Defaults to true (status required)
+   *  to keep parity with the marketplace intake flow. */
+  requiresStatus?: boolean;
 }
 
 // Default reasons match the marketplace shape Otto was originally
 // designed for (mark8ly storefront). Any non-marketplace consumer
 // MUST pass its own `reasons` prop.
 const DEFAULT_REASON_OPTIONS: readonly ReasonOption[] = [
+  { value: "general_question", label: "Ask a quick question", requiresStatus: false },
   { value: "order_issue", label: "Order issue", requiresDob: true },
   { value: "return", label: "Return / refund", requiresDob: true },
   { value: "payment", label: "Payment problem", requiresDob: true },
@@ -79,6 +86,12 @@ export interface OttoWidgetProps {
    *  forwarded to the backend, which validates them against the
    *  tenant's whitelist. If omitted, the marketplace defaults are used. */
   reasons?: readonly ReasonOption[];
+  /** Placeholder text for the "Current status / one-line summary"
+   *  field. Each product passes a domain-appropriate example
+   *  (e.g. fanzone -> "Points not updating after IPL #2042 match")
+   *  so the marketplace-shaped "Order #2041 arrived damaged"
+   *  doesn't leak into non-marketplace products. */
+  statusPlaceholder?: string;
   /** Stable per-product tenant identifier (e.g. "mark8ly", "fanzone",
    *  "homechef", "stockpilot", "gameverse", "horoscope", "scrapper").
    *  Sent as the `X-Tenant-ID` header on every Otto API call so the
@@ -129,6 +142,7 @@ export function OttoWidget({
   style,
   theme,
   reasons = DEFAULT_REASON_OPTIONS,
+  statusPlaceholder = "e.g. Order #2041 arrived damaged",
   tenantId,
 }: OttoWidgetProps) {
   const api = useMemo(
@@ -139,6 +153,16 @@ export function OttoWidget({
   // product can mark its own "needs an account lookup" reasons.
   const reasonRequiresDob = useCallback(
     (value: string) => reasons.some((r) => r.value === value && r.requiresDob),
+    [reasons],
+  );
+  // The "current status / one-line summary" field is required unless
+  // the selected reason explicitly opts out (general/quick-ask reasons).
+  // Defaulting to true keeps the marketplace shape unchanged.
+  const reasonRequiresStatus = useCallback(
+    (value: string) => {
+      const r = reasons.find((opt) => opt.value === value);
+      return !r || r.requiresStatus !== false;
+    },
     [reasons],
   );
   // The WS ticket endpoint is always the same-origin REST proxy, so the
@@ -305,7 +329,8 @@ export function OttoWidget({
   const startConversationNow = useCallback(
     async (input: { otpCode: string | undefined; message: string }) => {
       if (!reason) throw new Error("Please select a reason.");
-      if (!statusInfo.trim()) {
+      const needsStatus = reasonRequiresStatus(reason);
+      if (needsStatus && !statusInfo.trim()) {
         throw new Error("Please describe the issue.");
       }
       if (reasonRequiresDob(reason) && !dob.trim()) {
@@ -317,7 +342,7 @@ export function OttoWidget({
         name: name.trim() || undefined,
         email: email.trim() || undefined,
         reason,
-        status_info: statusInfo.trim(),
+        status_info: needsStatus ? statusInfo.trim() : "",
         dob: reasonRequiresDob(reason) ? dob.trim() : undefined,
       });
       setConversation(res.conversation);
@@ -326,7 +351,7 @@ export function OttoWidget({
       setChatDraft("");
       setPhase("chat");
     },
-    [api, email, name, reason, statusInfo, dob],
+    [api, email, name, reason, statusInfo, dob, reasonRequiresStatus, reasonRequiresDob],
   );
 
   // ── Phase 1: collect ─────────────────────────────────────────────────
@@ -350,7 +375,7 @@ export function OttoWidget({
         setError("Please pick a reason so we can route your case.");
         return;
       }
-      if (!statusInfo.trim()) {
+      if (reasonRequiresStatus(reason) && !statusInfo.trim()) {
         setError("A one-liner on the current status helps staff come up to speed.");
         return;
       }
@@ -626,22 +651,28 @@ export function OttoWidget({
                   ))}
                 </select>
 
-                <label
-                  className="otto-widget__field-label"
-                  htmlFor="otto-status"
-                >
-                  Current status / one-line summary
-                </label>
-                <input
-                  id="otto-status"
-                  className="otto-widget__input"
-                  placeholder="e.g. Order #2041 arrived damaged"
-                  value={statusInfo}
-                  onChange={(e) => setStatusInfo(e.target.value)}
-                  disabled={busy}
-                  required
-                  aria-label="Status summary"
-                />
+                {/* Quick-ask reasons (general_question) skip this field
+                    so a one-tap message lands without a second input. */}
+                {reason && reasonRequiresStatus(reason) && (
+                  <>
+                    <label
+                      className="otto-widget__field-label"
+                      htmlFor="otto-status"
+                    >
+                      Current status / one-line summary
+                    </label>
+                    <input
+                      id="otto-status"
+                      className="otto-widget__input"
+                      placeholder={statusPlaceholder}
+                      value={statusInfo}
+                      onChange={(e) => setStatusInfo(e.target.value)}
+                      disabled={busy}
+                      required
+                      aria-label="Status summary"
+                    />
+                  </>
+                )}
 
                 {reason && reasonRequiresDob(reason) && (
                   <>

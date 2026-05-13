@@ -125,19 +125,27 @@ const (
 	ReasonOther           = "other"
 )
 
+// ReasonGeneralQuestion is the universal quick-ask reason. Every tenant
+// includes it. Picking it lets a customer fire off a one-line question
+// without filling the "current status" field or providing DOB — the
+// chat goes straight to the SLM (or queued staff) with just the
+// message body. This is the only reason that skips the status check.
+const ReasonGeneralQuestion = "general_question"
+
 // TenantReasons is the per-tenant whitelist of intake reasons + the
 // subset that triggers the date-of-birth verification step on the
-// intake form. The widget sends `X-Tenant-ID` and a reason string;
-// this table is the backend's single source of truth for "is this
-// reason valid for this tenant" and "does this reason demand a DOB".
+// intake form + the subset that skips the "current status / one-line
+// summary" field. The widget sends `X-Tenant-ID` and a reason string;
+// this table is the backend's single source of truth.
 //
 // Keys MUST match the tenantId the @tesserix/otto-widget wrapper
 // passes (see slm-support-platform/docs/per-product-slm-mcp-routing.md
 // for the canonical list). An unknown tenant falls back to the
 // marketplace whitelist for backwards-compatibility.
 var TenantReasons = map[string]struct {
-	Whitelist  map[string]bool
-	NeedsDOB   map[string]bool
+	Whitelist map[string]bool
+	NeedsDOB  map[string]bool
+	NoStatus  map[string]bool
 }{
 	"mark8ly": {
 		Whitelist: map[string]bool{
@@ -146,47 +154,63 @@ var TenantReasons = map[string]struct {
 			ReasonPayment:         true,
 			ReasonProductQuestion: true,
 			ReasonOther:           true,
+			ReasonGeneralQuestion: true,
 		},
 		NeedsDOB: map[string]bool{
 			ReasonOrderIssue: true,
 			ReasonReturn:     true,
 			ReasonPayment:    true,
 		},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 	"fanzone": {
 		Whitelist: map[string]bool{
-			"account_issue":    true,
-			"points_question":  true,
-			"prediction_issue": true,
-			"match_question":   true,
-			"bug_report":       true,
-			"other":            true,
+			"account_issue":       true,
+			"points_question":     true,
+			"prediction_issue":    true,
+			"match_question":      true,
+			"bug_report":          true,
+			"other":               true,
+			ReasonGeneralQuestion: true,
 		},
 		// No DOB lookups — FanZone identifies users by Firebase UID,
 		// not by birthday. Asking for DOB on a sports site is creepy.
 		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 	"homechef": {
 		Whitelist: map[string]bool{
-			"order_tracking":  true,
-			"delivery_issue":  true,
-			"refund":          true,
-			"chef_question":   true,
-			"account_issue":   true,
-			"other":           true,
+			"order_tracking":      true,
+			"delivery_issue":      true,
+			"refund":              true,
+			"chef_question":       true,
+			"account_issue":       true,
+			"other":               true,
+			ReasonGeneralQuestion: true,
 		},
 		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 	"stockpilot": {
 		Whitelist: map[string]bool{
-			"portfolio_question": true,
-			"broker_connection":  true,
-			"ai_agent_issue":     true,
-			"billing":            true,
-			"bug_report":         true,
-			"other":              true,
+			"portfolio_question":  true,
+			"broker_connection":   true,
+			"ai_agent_issue":      true,
+			"billing":             true,
+			"bug_report":          true,
+			"other":               true,
+			ReasonGeneralQuestion: true,
 		},
 		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 	"gameverse": {
 		Whitelist: map[string]bool{
@@ -196,30 +220,42 @@ var TenantReasons = map[string]struct {
 			"account_issue":        true,
 			"bug_report":           true,
 			"other":                true,
+			ReasonGeneralQuestion:  true,
 		},
 		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 	"horoscope": {
 		Whitelist: map[string]bool{
-			"chart_question":   true,
-			"reading_question": true,
-			"scan_issue":       true,
-			"account_issue":    true,
-			"billing":          true,
-			"other":            true,
+			"chart_question":      true,
+			"reading_question":    true,
+			"scan_issue":          true,
+			"account_issue":       true,
+			"billing":             true,
+			"other":               true,
+			ReasonGeneralQuestion: true,
 		},
 		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 	"scrapper": {
 		Whitelist: map[string]bool{
-			"scrape_job_issue":   true,
-			"ai_analysis_issue":  true,
-			"publishing_issue":   true,
-			"account_connection": true,
-			"billing":            true,
-			"other":              true,
+			"scrape_job_issue":    true,
+			"ai_analysis_issue":   true,
+			"publishing_issue":    true,
+			"account_connection":  true,
+			"billing":             true,
+			"other":               true,
+			ReasonGeneralQuestion: true,
 		},
 		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
 	},
 }
 
@@ -248,4 +284,16 @@ func DOBRequiredFor(tenantID, reason string) bool {
 		rules = TenantReasons[fallbackTenant]
 	}
 	return rules.NeedsDOB[reason]
+}
+
+// StatusRequiredFor reports whether the "current status / one-line
+// summary" field is required for this (tenant, reason) pair. Quick-ask
+// reasons (e.g. general_question) skip it so a one-tap message lands
+// without a second free-text input.
+func StatusRequiredFor(tenantID, reason string) bool {
+	rules, ok := TenantReasons[tenantID]
+	if !ok {
+		rules = TenantReasons[fallbackTenant]
+	}
+	return !rules.NoStatus[reason]
 }
