@@ -1,16 +1,15 @@
 """Per-tenant tool definitions.
 
-Every tool returns a STUB response that mirrors the shape a real
-backend would return. The stub flag (`"_stub": true`) is included so
-the AI agent can caveat its reply with "based on a sample response …".
-Product teams replace the stub bodies with real httpx calls to their
-own APIs as the integrations land — the tool signature and return
-shape stay the same so the SLM doesn't need re-training.
+Each tenant's tools call its own product backend over HTTP (in-cluster
+service DNS) and return the parsed response to the SLM. Where a real
+backend route doesn't exist yet, the tool returns a structured
+`not_implemented` response — never fake data — so the SLM tells the
+customer "I can't fetch that yet" instead of inventing numbers.
 """
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -35,66 +34,115 @@ def register(mcp, cfg: Config) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Shared helpers — every tool follows the same call pattern.
+# ---------------------------------------------------------------------------
+
+# Backends are in-cluster and on the customer hot path, so the timeout
+# is small enough to fail fast (the orchestrator falls back to RAG /
+# generic reply) but big enough to absorb a cold-start Knative pod.
+_HTTP_TIMEOUT_SECONDS = 4.0
+
+
+async def _get_json(
+    base_url: str,
+    path: str,
+    *,
+    source: str,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """GET {base_url}{path}; return either the parsed JSON (annotated
+    with `source`) or a structured error. Never raises — the caller
+    hands the dict back to the SLM as the tool result either way.
+    """
+    url = f"{base_url}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            res = await client.get(url, params=params, headers=headers)
+        if 200 <= res.status_code < 300:
+            try:
+                body = res.json()
+            except ValueError:
+                body = {"raw": res.text[:500]}
+            return {**(body if isinstance(body, dict) else {"data": body}), "source": source}
+        return {
+            "error": "lookup_failed",
+            "status": res.status_code,
+            "detail": res.text[:300] if res.text else None,
+            "source": source,
+        }
+    except httpx.HTTPError as exc:
+        logger.warning("backend GET %s failed: %s", url, exc)
+        return {"error": "backend_unreachable", "detail": str(exc), "source": source}
+
+
+def _not_implemented(tool: str, reason: str) -> dict[str, Any]:
+    """Return value for tools whose product backend doesn't yet expose
+    the data over HTTP. The SLM should treat this as a hard signal to
+    say 'that feature isn't available right now' — NOT to fabricate.
+    """
+    return {
+        "error": "not_implemented",
+        "tool": tool,
+        "reason": reason,
+        "_action_for_assistant": (
+            "Tell the customer this specific lookup isn't available yet, "
+            "offer to connect them to a human if relevant. Do NOT invent values."
+        ),
+    }
+
+
+def _now() -> datetime:
+    return datetime.now(tz=timezone.utc)
+
+
+def _iso(value: datetime) -> str:
+    return value.isoformat()
+
+
+# ---------------------------------------------------------------------------
 # mark8ly — marketplace e-commerce
 # ---------------------------------------------------------------------------
 def _register_mark8ly(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_order",
         description=(
-            "Look up a customer order by order id. Returns status, items, "
-            "totals, shipment tracking and the merchant who owns the order."
+            "Look up a customer order by order_id. Returns status, items, "
+            "totals, shipment tracking. Pass store_slug from the conversation "
+            "context if known; defaults to 'tesserix-store' otherwise."
         ),
     )
-    async def get_order(order_id: str) -> dict[str, Any]:
-        return {
-            "order_id": order_id,
-            "status": "shipped",
-            "merchant": {"slug": "tesserix-store", "name": "Tesserix Store"},
-            "placed_at": _iso(_now() - timedelta(days=2)),
-            "shipped_at": _iso(_now() - timedelta(hours=18)),
-            "estimated_delivery": _iso(_now() + timedelta(days=1)),
-            "items": [
-                {"sku": "SKU-001", "name": "Sample Product", "qty": 1, "price_cents": 4999},
-            ],
-            "totals": {"subtotal_cents": 4999, "shipping_cents": 0, "total_cents": 4999, "currency": "INR"},
-            "tracking": {"carrier": "BlueDart", "tracking_number": "BD-2026-XXXX"},
-            "_stub": True,
-        }
+    async def get_order(order_id: str, store_slug: str = "tesserix-store") -> dict[str, Any]:
+        path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}"
+        return await _get_json(cfg.mark8ly_orders_url, path, source="mp-orders")
 
     @mcp.tool(
         name="list_returns",
-        description="List return requests for a customer email. Status, RMA id, refund amount.",
+        description=(
+            "List return requests scoped to a specific order. Pass the order_id "
+            "(no email-scoped endpoint exists). Returns RMA id, status, refund amount."
+        ),
     )
-    async def list_returns(email: str, limit: int = 5) -> dict[str, Any]:
-        return {
-            "email": email,
-            "returns": [
-                {
-                    "rma_id": "RMA-2025-0001",
-                    "order_id": "ORD-2025-12345",
-                    "status": "refund_issued",
-                    "amount_cents": 2499,
-                    "currency": "INR",
-                    "created_at": _iso(_now() - timedelta(days=4)),
-                }
-            ][:limit],
-            "_stub": True,
-        }
+    async def list_returns(order_id: str, store_slug: str = "tesserix-store", limit: int = 5) -> dict[str, Any]:
+        path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}/returns"
+        return await _get_json(
+            cfg.mark8ly_orders_url, path,
+            source="mp-orders",
+            params={"limit": max(1, min(limit, 25))},
+        )
 
     @mcp.tool(
         name="check_payment_status",
-        description="Resolve a payment by gateway reference. Useful when a customer paid but the order shows unpaid.",
+        description=(
+            "Resolve a payment by gateway reference (razorpay/stripe). NOT YET "
+            "WIRED — the mp-payment service is still stubbed in mark8ly."
+        ),
     )
     async def check_payment_status(gateway_reference: str) -> dict[str, Any]:
-        return {
-            "gateway_reference": gateway_reference,
-            "gateway": "razorpay",
-            "state": "captured",
-            "amount_cents": 4999,
-            "currency": "INR",
-            "captured_at": _iso(_now() - timedelta(minutes=12)),
-            "_stub": True,
-        }
+        return _not_implemented(
+            "check_payment_status",
+            "mark8ly mp-payment service has no public lookup endpoint yet.",
+        ) | {"gateway_reference": gateway_reference}
 
 
 # ---------------------------------------------------------------------------
@@ -105,86 +153,39 @@ def _register_fanzone(mcp, cfg: Config) -> None:
         name="get_user_points",
         description=(
             "Return the user's CURRENT points balance from the fanzone-user "
-            "service. Always pass the conversation customer's user_id "
-            "exactly as it appears on the conversation document — never "
-            "make one up."
+            "service. Pass the conversation customer's user_id exactly — "
+            "never invent one."
         ),
     )
     async def get_user_points(user_id: str) -> dict[str, Any]:
-        # GET http://fanzone-user.fanzone.svc.cluster.local
-        #     /api/v1/users/{user_id}/points
-        # returns: {"balance": int, "total_earned": int, "total_spent": int}
-        url = f"{cfg.fanzone_user_url}/api/v1/users/{user_id}/points"
-        try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                res = await client.get(url)
-            if res.status_code == 200:
-                body = res.json()
-                return {
-                    "user_id": user_id,
-                    "balance": body.get("balance", 0),
-                    "total_earned": body.get("total_earned", 0),
-                    "total_spent": body.get("total_spent", 0),
-                    "source": "fanzone-user",
-                }
-            return {
-                "user_id": user_id,
-                "error": "lookup_failed",
-                "status": res.status_code,
-                "source": "fanzone-user",
-            }
-        except httpx.HTTPError as exc:
-            logger.warning("get_user_points failed: %s", exc)
-            return {
-                "user_id": user_id,
-                "error": "backend_unreachable",
-                "detail": str(exc),
-                "source": "fanzone-user",
-            }
+        return await _get_json(
+            cfg.fanzone_user_url,
+            f"/api/v1/users/{user_id}/points",
+            source="fanzone-user",
+        )
 
     @mcp.tool(
         name="get_match_info",
-        description=(
-            "Look up an IPL/T20/ODI match by id from sports-data. Returns "
-            "live score, teams, toss, venue."
-        ),
+        description="Look up an IPL/T20/ODI match by id from sports-data.",
     )
     async def get_match_info(match_id: str) -> dict[str, Any]:
-        url = f"{cfg.fanzone_match_url}/api/v1/cricket/matches/{match_id}"
-        try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                res = await client.get(url)
-            if res.status_code == 200:
-                return {
-                    "match_id": match_id,
-                    "result": res.json(),
-                    "source": "sports-data",
-                }
-            return {"match_id": match_id, "error": "lookup_failed", "status": res.status_code}
-        except httpx.HTTPError as exc:
-            logger.warning("get_match_info failed: %s", exc)
-            return {"match_id": match_id, "error": "backend_unreachable", "detail": str(exc)}
+        return await _get_json(
+            cfg.fanzone_match_url,
+            f"/api/v1/cricket/matches/{match_id}",
+            source="sports-data",
+        )
 
     @mcp.tool(
         name="list_user_predictions",
-        description="Return the user's recent prediction picks, locked status, and settled outcome.",
+        description="Recent prediction picks for a user: locked, settled, stake.",
     )
     async def list_user_predictions(user_id: str, limit: int = 5) -> dict[str, Any]:
-        url = f"{cfg.fanzone_prediction_url}/api/v1/predictions/users/{user_id}"
-        params = {"limit": max(1, min(limit, 25))}
-        try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                res = await client.get(url, params=params)
-            if res.status_code == 200:
-                return {
-                    "user_id": user_id,
-                    "predictions": res.json(),
-                    "source": "fanzone-prediction",
-                }
-            return {"user_id": user_id, "error": "lookup_failed", "status": res.status_code}
-        except httpx.HTTPError as exc:
-            logger.warning("list_user_predictions failed: %s", exc)
-            return {"user_id": user_id, "error": "backend_unreachable", "detail": str(exc)}
+        return await _get_json(
+            cfg.fanzone_prediction_url,
+            f"/api/v1/predictions/users/{user_id}",
+            source="fanzone-prediction",
+            params={"limit": max(1, min(limit, 25))},
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -193,264 +194,214 @@ def _register_fanzone(mcp, cfg: Config) -> None:
 def _register_homechef(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_order_status",
-        description="Look up a HomeChef order by id. Returns status, ETA, chef, items and live driver location if available.",
+        description="Look up a HomeChef order by id. Status, ETA, chef, items, driver location.",
     )
     async def get_order_status(order_id: str) -> dict[str, Any]:
-        return {
-            "order_id": order_id,
-            "status": "out_for_delivery",
-            "chef": {"id": "chef-rachna", "name": "Rachna Mehta"},
-            "items": [{"name": "Veg thali", "qty": 1}],
-            "eta_minutes": 12,
-            "driver": {"name": "Anil", "phone_masked": "+91-XXXXX-XX42", "lat": 12.9716, "lng": 77.5946},
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.homechef_api_url,
+            f"/api/v1/orders/{order_id}",
+            source="homechef-api",
+        )
 
     @mcp.tool(
         name="get_chef_availability",
-        description="Check whether a chef is currently open for orders and their next available delivery window.",
+        description="Is a chef currently taking orders + their next delivery window.",
     )
     async def get_chef_availability(chef_id: str) -> dict[str, Any]:
-        return {
-            "chef_id": chef_id,
-            "open_now": True,
-            "next_window_open_at": _iso(_now() + timedelta(hours=4)),
-            "lead_time_minutes": 45,
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.homechef_api_url,
+            f"/api/v1/chefs/{chef_id}",
+            source="homechef-api",
+        )
 
     @mcp.tool(
         name="track_delivery",
-        description="Live delivery state for an in-flight order. Returns coordinates + ETA + driver phone (masked).",
+        description="Live delivery state for an in-flight order. Coords + ETA + masked driver phone.",
     )
     async def track_delivery(order_id: str) -> dict[str, Any]:
-        return {
-            "order_id": order_id,
-            "state": "en_route",
-            "driver_lat": 12.9716,
-            "driver_lng": 77.5946,
-            "distance_km": 1.4,
-            "eta_minutes": 9,
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.homechef_api_url,
+            f"/api/v1/orders/{order_id}/track",
+            source="homechef-api",
+        )
 
 
 # ---------------------------------------------------------------------------
 # stockpilot — AI stock analysis
 # ---------------------------------------------------------------------------
 def _register_stockpilot(mcp, cfg: Config) -> None:
+    _DISCLAIMER = "Not financial advice. Verify before trading."
+
     @mcp.tool(
         name="get_portfolio_summary",
-        description="Snapshot of the user's portfolio: equity, buying power, top holdings, daily P/L.",
+        description=(
+            "Snapshot of the user's portfolio: equity, buying power, top "
+            "holdings, daily P/L. Pass the user's stockpilot account_id."
+        ),
     )
     async def get_portfolio_summary(account_id: str) -> dict[str, Any]:
-        return {
-            "account_id": account_id,
-            "equity_cents": 12_345_67,
-            "cash_cents": 1_500_00,
-            "buying_power_cents": 3_000_00,
-            "daily_pl_cents": -45_22,
-            "top_holdings": [
-                {"symbol": "NVDA", "qty": 12, "market_value_cents": 240_00_00, "weight": 0.42},
-                {"symbol": "AAPL", "qty": 20, "market_value_cents": 180_00_00, "weight": 0.31},
-            ],
-            "_stub": True,
-            "_disclaimer": "Not financial advice. Verify before trading.",
-        }
+        result = await _get_json(
+            cfg.stockpilot_api_url,
+            f"/api/portfolios/{account_id}",
+            source="stockpilot-api",
+        )
+        result.setdefault("_disclaimer", _DISCLAIMER)
+        return result
 
     @mcp.tool(
         name="get_broker_status",
-        description="Health of the Alpaca broker connection: OAuth state, last sync time, error details if any.",
+        description="Alpaca broker connection health for the user's account.",
     )
     async def get_broker_status(account_id: str) -> dict[str, Any]:
-        return {
-            "account_id": account_id,
-            "broker": "alpaca",
-            "mode": "paper",
-            "connected": True,
-            "last_sync_at": _iso(_now() - timedelta(minutes=2)),
-            "error": None,
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.stockpilot_api_url,
+            f"/api/broker/alpaca/accounts/{account_id}",
+            source="stockpilot-api",
+        )
 
     @mcp.tool(
         name="get_agent_trace",
-        description="Return the LangGraph agent's trace for the most recent run on a symbol. Steps, tool calls, final decision.",
+        description=(
+            "LangGraph agent trace for a recent run on a symbol. NOT YET WIRED "
+            "— stockpilot exposes reports via /api/agents/reports/{report_id} "
+            "but not a generic trace-by-id endpoint."
+        ),
     )
     async def get_agent_trace(symbol: str, run_id: str | None = None) -> dict[str, Any]:
-        return {
-            "symbol": symbol,
-            "run_id": run_id or "agent-run-stub-0001",
-            "steps": [
-                {"agent": "supervisor", "action": "fan_out", "at": _iso(_now() - timedelta(minutes=4))},
-                {"agent": "fundamental_analyst", "action": "score", "result": "Hold", "at": _iso(_now() - timedelta(minutes=3))},
-                {"agent": "technical_analyst", "action": "score", "result": "Buy", "at": _iso(_now() - timedelta(minutes=2))},
-                {"agent": "supervisor", "action": "synthesise", "result": "Hold", "at": _iso(_now() - timedelta(minutes=1))},
-            ],
-            "_stub": True,
-        }
+        return _not_implemented(
+            "get_agent_trace",
+            "stockpilot agent traces aren't exposed by trace_id; reports are by report_id only.",
+        ) | {"symbol": symbol, "run_id": run_id}
 
 
 # ---------------------------------------------------------------------------
 # gameverse — multiplayer board games
 # ---------------------------------------------------------------------------
 def _register_gameverse(mcp, cfg: Config) -> None:
+    # gameverse-server is currently WebSocket-only — there's no REST
+    # surface for room state, user ratings, or match history. Return
+    # structured not_implemented so the SLM doesn't fabricate scores.
     @mcp.tool(
         name="get_room_state",
-        description="Snapshot of a game room: players, turn order, last move, current game state.",
+        description="Snapshot of a game room. NOT YET WIRED — gameverse-server is WebSocket-only.",
     )
     async def get_room_state(room_code: str) -> dict[str, Any]:
-        return {
-            "room_code": room_code,
-            "game": "ludo",
-            "status": "in_progress",
-            "turn": "player_2",
-            "players": [
-                {"slot": 1, "user_id": "user1@ludo.com", "color": "red", "tokens_home": 2},
-                {"slot": 2, "user_id": "user2@ludo.com", "color": "green", "tokens_home": 1},
-                {"slot": 3, "user_id": "user3@ludo.com", "color": "yellow", "tokens_home": 0},
-                {"slot": 4, "user_id": "user4@ludo.com", "color": "blue", "tokens_home": 0},
-            ],
-            "last_move": {"player": "player_1", "die_roll": 5, "token_moved": 2},
-            "_stub": True,
-        }
+        return _not_implemented(
+            "get_room_state",
+            "gameverse-server streams room state via WebSocket; no GET endpoint yet.",
+        ) | {"room_code": room_code}
 
     @mcp.tool(
         name="get_user_rating",
-        description="User's Glicko-2 rating per game plus win/loss/draw counts.",
+        description="Glicko-2 rating per game. NOT YET WIRED — no public ratings endpoint.",
     )
     async def get_user_rating(user_id: str) -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "ratings": {
-                "ludo": {"rating": 1620, "rd": 90, "wins": 14, "losses": 9, "draws": 1},
-                "chess": {"rating": 1505, "rd": 110, "wins": 4, "losses": 6, "draws": 0},
-            },
-            "_stub": True,
-        }
+        return _not_implemented(
+            "get_user_rating",
+            "gameverse hasn't exposed Glicko-2 ratings over HTTP yet.",
+        ) | {"user_id": user_id}
 
     @mcp.tool(
         name="get_match_history",
-        description="Recent matches for a user. Result, opponent, rating change.",
+        description="Recent matches for a user. NOT YET WIRED — no match-history endpoint.",
     )
     async def get_match_history(user_id: str, limit: int = 5) -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "matches": [
-                {
-                    "game": "ludo",
-                    "opponent_user_ids": ["user2@ludo.com"],
-                    "result": "win",
-                    "rating_delta": 14,
-                    "played_at": _iso(_now() - timedelta(hours=2)),
-                }
-            ][:limit],
-            "_stub": True,
-        }
+        return _not_implemented(
+            "get_match_history",
+            "gameverse-server stores matches in PostgreSQL but doesn't expose them over HTTP.",
+        ) | {"user_id": user_id}
 
 
 # ---------------------------------------------------------------------------
 # horoscope — astrology
 # ---------------------------------------------------------------------------
 def _register_horoscope(mcp, cfg: Config) -> None:
+    _DISCLAIMER = "For entertainment / self-reflection only."
+
     @mcp.tool(
         name="get_chart_summary",
-        description="Sun/moon/ascendant + dominant element/modality. Tradition: 'western' or 'vedic'.",
+        description=(
+            "Sun/Moon/Ascendant + dominant element/modality for the customer. "
+            "Pass tradition='western' or 'vedic'. Backend reads identity from "
+            "X-User-Id so we forward the customer's user_id as that header."
+        ),
     )
     async def get_chart_summary(user_id: str, tradition: str = "western") -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "tradition": tradition,
-            "sun": {"sign": "Cancer", "degrees": 14.2},
-            "moon": {"sign": "Pisces", "degrees": 22.8},
-            "ascendant": {"sign": "Libra", "degrees": 3.1},
-            "dominant": {"element": "water", "modality": "cardinal"},
-            "_stub": True,
-            "_disclaimer": "For entertainment / self-reflection only.",
-        }
+        result = await _get_json(
+            cfg.horoscope_api_url,
+            "/api/v1/me/chart",
+            source="horoscope-api",
+            params={"tradition": tradition},
+            headers={"X-User-Id": user_id} if user_id else None,
+        )
+        result.setdefault("_disclaimer", _DISCLAIMER)
+        return result
 
     @mcp.tool(
         name="get_today_transit",
-        description="Notable transits affecting this user today.",
+        description="Notable transits affecting this customer today.",
     )
     async def get_today_transit(user_id: str) -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "transits": [
-                {"planet": "Moon", "aspect": "trine", "natal_planet": "Venus", "exact_at": _iso(_now() + timedelta(hours=6))}
-            ],
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.horoscope_api_url,
+            "/api/v1/me/reading",
+            source="horoscope-api",
+            headers={"X-User-Id": user_id} if user_id else None,
+        )
 
     @mcp.tool(
         name="list_recent_readings",
-        description="Recent readings (palm / face / chart-based composed text) the user has on file.",
+        description="Recent visual readings (palm/face/chart) on file for the user.",
     )
     async def list_recent_readings(user_id: str, limit: int = 3) -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "readings": [
-                {
-                    "kind": "chart",
-                    "summary": "Cancer Sun seeking a more grounded routine in the weeks ahead…",
-                    "created_at": _iso(_now() - timedelta(days=1)),
-                }
-            ][:limit],
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.horoscope_api_url,
+            "/api/v1/me/readings/visual",
+            source="horoscope-api",
+            params={"limit": max(1, min(limit, 25))},
+            headers={"X-User-Id": user_id} if user_id else None,
+        )
 
 
 # ---------------------------------------------------------------------------
 # scrapper — social media intel
 # ---------------------------------------------------------------------------
 def _register_scrapper(mcp, cfg: Config) -> None:
+    # The scrapper FastAPI backend (src/api/server.py) exposes
+    # /api/jobs/{id}, /api/campaigns, /api/accounts — wire them.
     @mcp.tool(
         name="get_scrape_job",
-        description="State of a single scrape job: progress, profile count, errors per platform.",
+        description="State of a scrape job: progress, profile count, per-platform errors.",
     )
     async def get_scrape_job(job_id: str) -> dict[str, Any]:
-        return {
-            "job_id": job_id,
-            "status": "running",
-            "progress_pct": 67,
-            "profiles_scraped": 1_240,
-            "errors_by_platform": {"instagram": 0, "x": 2, "facebook": 0, "reddit": 0, "linkedin": 1, "tiktok": 0},
-            "_stub": True,
-        }
+        return await _get_json(
+            cfg.scrapper_api_url,
+            f"/api/jobs/{job_id}",
+            source="scrapper-api",
+        )
 
     @mcp.tool(
         name="list_publishing_pipelines",
-        description="Active publishing pipelines and the platforms they target.",
+        description="Active publishing campaigns + target platforms.",
     )
-    async def list_publishing_pipelines() -> dict[str, Any]:
-        return {
-            "pipelines": [
-                {"id": "pl-001", "name": "Daily campaign", "platforms": ["x", "facebook", "linkedin"], "active": True},
-            ],
-            "_stub": True,
-        }
+    async def list_publishing_pipelines(limit: int = 10) -> dict[str, Any]:
+        return await _get_json(
+            cfg.scrapper_api_url,
+            "/api/campaigns",
+            source="scrapper-api",
+            params={"limit": max(1, min(limit, 50))},
+        )
 
     @mcp.tool(
         name="list_connected_accounts",
-        description="Connected platform accounts for the operator: token state + expiry.",
+        description="Connected social platform accounts: handle, token state, expiry.",
     )
     async def list_connected_accounts() -> dict[str, Any]:
-        return {
-            "accounts": [
-                {"platform": "x", "handle": "@example", "token_state": "valid", "expires_at": _iso(_now() + timedelta(days=30))},
-                {"platform": "linkedin", "handle": "example-co", "token_state": "expiring_soon", "expires_at": _iso(_now() + timedelta(days=2))},
-            ],
-            "_stub": True,
-        }
-
-
-# ---------------------------------------------------------------------------
-def _now() -> datetime:
-    return datetime.now(tz=timezone.utc)
-
-
-def _iso(value: datetime) -> str:
-    return value.isoformat()
+        return await _get_json(
+            cfg.scrapper_api_url,
+            "/api/accounts",
+            source="scrapper-api",
+        )
 
 
 __all__ = ["register"]
