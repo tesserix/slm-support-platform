@@ -1,9 +1,15 @@
 // Package embed talks to the embedder service.
 //
-// Contract: POST /embed accepts {"texts": [...]} and returns
-// {"embeddings": [[...float32...]]} in the same order. Dimension is
-// fixed per deployed model (bge-small-en is 384) and is checked
-// against an expected value if WithExpectedDim is set.
+// The embedder is HuggingFace Text Embeddings Inference (TEI) running
+// `ghcr.io/huggingface/text-embeddings-inference:cpu-1.8`. Its contract:
+//
+//	POST /embed
+//	  request:  {"inputs": "text"} or {"inputs": ["t1", "t2"]}
+//	  response: [[float, ...], [float, ...]]    ← bare array, no wrapper
+//
+// We always pass an array and unmarshal a bare array of vectors.
+// Dimension is fixed per deployed model (bge-small-en is 384) and is
+// checked against an expected value if WithExpectedDim is set.
 package embed
 
 import (
@@ -22,12 +28,10 @@ type Client interface {
 	Embed(ctx context.Context, texts []string) ([][]float32, error)
 }
 
+// request matches the TEI shape exactly. The field name MUST be
+// `inputs` — TEI returns "missing field `inputs`" 422 otherwise.
 type request struct {
-	Texts []string `json:"texts"`
-}
-
-type response struct {
-	Embeddings [][]float32 `json:"embeddings"`
+	Inputs []string `json:"inputs"`
 }
 
 // HTTPClient is the concrete Client backed by net/http.
@@ -67,7 +71,7 @@ func (c *HTTPClient) Embed(ctx context.Context, texts []string) ([][]float32, er
 	if len(texts) == 0 {
 		return nil, nil
 	}
-	body, err := json.Marshal(request{Texts: texts})
+	body, err := json.Marshal(request{Inputs: texts})
 	if err != nil {
 		return nil, fmt.Errorf("marshal: %w", err)
 	}
@@ -85,21 +89,23 @@ func (c *HTTPClient) Embed(ctx context.Context, texts []string) ([][]float32, er
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("embed HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
-	var out response
+	// TEI returns a bare `[[float, ...], ...]` — no envelope. Unmarshal
+	// straight into the result slice.
+	var out [][]float32
 	if err := json.Unmarshal(respBody, &out); err != nil {
 		return nil, fmt.Errorf("decode: %w", err)
 	}
-	if len(out.Embeddings) != len(texts) {
-		return nil, fmt.Errorf("embed returned %d vectors for %d texts", len(out.Embeddings), len(texts))
+	if len(out) != len(texts) {
+		return nil, fmt.Errorf("embed returned %d vectors for %d texts", len(out), len(texts))
 	}
 	if c.expectedDim > 0 {
-		for i, v := range out.Embeddings {
+		for i, v := range out {
 			if len(v) != c.expectedDim {
 				return nil, fmt.Errorf("embed vector %d has dim %d, expected %d", i, len(v), c.expectedDim)
 			}
 		}
 	}
-	return out.Embeddings, nil
+	return out, nil
 }
 
 var _ Client = (*HTTPClient)(nil)
