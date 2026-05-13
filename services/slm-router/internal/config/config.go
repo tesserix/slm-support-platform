@@ -134,6 +134,25 @@ type ProductConfig struct {
 
 	// Policy that decides when to escalate to human (NeedsHuman=true).
 	Escalation EscalationPolicy `yaml:"escalation"`
+
+	// Optional callback hit AFTER MarkNeedsHuman succeeds. Used to
+	// materialise a durable ticket in the product's own DB (e.g.
+	// mark8ly's marketplace-api POST /internal/v1/tickets/from-
+	// conversation). When unset, escalation just flips needs_human
+	// in Otto and emits the soft hand-off message — no ticket.
+	EscalationHook EscalationHook `yaml:"escalation_hook"`
+}
+
+// EscalationHook configures the per-tenant ticket-creation callback.
+// The URL receives a fixed JSON shape:
+//   {conversation_id, tenant_id, store_id, customer_name,
+//    customer_email, subject, description, escalation_reason}
+// The endpoint MUST be idempotent on conversation_id — slm-router
+// retries on transient failure.
+type EscalationHook struct {
+	URL         string `yaml:"url"`
+	AuthHeader  string `yaml:"auth_header"`  // e.g. "X-Internal-Auth"
+	AuthEnvVar  string `yaml:"auth_env_var"` // env var that holds the secret
 }
 
 // MCPServerConfig points slm-router at a per-product MCP server. Auth

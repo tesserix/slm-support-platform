@@ -1,11 +1,14 @@
 package orchestrator
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -297,7 +300,103 @@ func (o *Orchestrator) escalate(ctx context.Context, ev watcher.CustomerMessage,
 		SenderID:       "slm-router",
 		SenderName:     "Otto",
 	})
+	// Optional per-tenant escalation hook — POSTs the conversation
+	// context to the product's own ticket service so a durable
+	// ticket lands in the merchant's dashboard immediately. Failure
+	// here is logged but doesn't fail the escalation: needs_human
+	// is already set so the Otto admin inbox will still surface it.
+	if product, _, ok := o.deps.Config.Routes.ResolveProduct(ev.TenantID); ok {
+		o.fireEscalationHook(ctx, ev, reason, product)
+	}
 	return nil
+}
+
+func (o *Orchestrator) fireEscalationHook(
+	ctx context.Context, ev watcher.CustomerMessage, reason string, product config.ProductConfig,
+) {
+	hook := product.EscalationHook
+	if hook.URL == "" {
+		return
+	}
+	log := slog.With(
+		"service", "slm-router",
+		"conversation_id", ev.ConversationID,
+		"tenant_id", ev.TenantID,
+		"hook_url", hook.URL,
+	)
+	// Pull customer + recent history so the ticket lands with
+	// useful context (subject = first customer message; description
+	// = full transcript). Both are best-effort.
+	customer, _ := o.deps.Otto.Customer(ctx, ev.ConversationID)
+	history, _ := o.deps.Otto.RecentMessages(ctx, ev.ConversationID, historyLimit)
+	subject := truncate(ev.Body, 280)
+	description := renderTranscript(history, ev.Body)
+
+	payload := map[string]any{
+		"conversation_id":   ev.ConversationID,
+		"tenant_id":         ev.TenantID,
+		"store_id":          ev.StoreID,
+		"customer_name":     customer.Name,
+		"customer_email":    customer.Email,
+		"subject":           subject,
+		"description":       description,
+		"escalation_reason": reason,
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		log.Warn("escalation hook marshal failed", "err", err.Error())
+		return
+	}
+	hookCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(hookCtx, http.MethodPost, hook.URL, bytes.NewReader(body))
+	if err != nil {
+		log.Warn("escalation hook build failed", "err", err.Error())
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if hook.AuthHeader != "" && hook.AuthEnvVar != "" {
+		if secret := os.Getenv(hook.AuthEnvVar); secret != "" {
+			req.Header.Set(hook.AuthHeader, secret)
+		}
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Warn("escalation hook POST failed", "err", err.Error())
+		return
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		log.Warn("escalation hook rejected", "status", res.StatusCode)
+		return
+	}
+	log.Info("escalation hook fired", "status", res.StatusCode)
+}
+
+func truncate(s string, max int) string {
+	s = strings.TrimSpace(s)
+	if len(s) <= max {
+		return s
+	}
+	return s[:max] + "…"
+}
+
+func renderTranscript(history []otto.HistoryMessage, lastCustomerMsg string) string {
+	var b strings.Builder
+	for _, h := range history {
+		who := h.SenderType
+		switch who {
+		case "customer":
+			who = "Customer"
+		case "assistant", "staff":
+			who = "Otto AI"
+		}
+		fmt.Fprintf(&b, "[%s] %s\n", who, h.Body)
+	}
+	if lastCustomerMsg != "" {
+		fmt.Fprintf(&b, "[Customer] %s\n", lastCustomerMsg)
+	}
+	return b.String()
 }
 
 func (o *Orchestrator) resolveTools(ctx context.Context, tenantID string, servers []config.MCPServerConfig) ([]inference.Tool, map[string]mcp.ServerRef, error) {
