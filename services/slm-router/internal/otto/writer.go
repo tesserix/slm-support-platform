@@ -87,8 +87,14 @@ func (w *MongoWriter) PostAssistantMessage(ctx context.Context, msg AssistantMes
 		"body":            msg.Body,
 		"created_at":      now,
 	}
+	// When the AI replies on a `pending` conversation, promote it to
+	// `active`. The AI is effectively the agent for this thread until
+	// the escalation policy flips needs_human=true. Without this, the
+	// widget's "Queued — waiting for an agent" overlay sits on top of
+	// the AI reply and the customer never sees the message.
 	convUpdate := bson.M{
 		"$set": bson.M{
+			"status":                    "active",
 			"last_message_at":           now,
 			"last_assistant_message_at": now,
 			"updated_at":                now,
