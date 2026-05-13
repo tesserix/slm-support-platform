@@ -113,8 +113,10 @@ type Conversation struct {
 	UnreadCountStaff    int `bson:"unread_count_staff" json:"unread_count_staff"`
 }
 
-// Reasons enumerates the fixed intake reasons. The DOB-required
-// subset is the one that touches order/account data.
+// Reasons enumerates the marketplace-shape intake reasons. Kept as
+// named consts because the storefront handlers + tests reference them
+// directly. New tenants extend the whitelist by adding entries to
+// TenantReasons rather than to this block.
 const (
 	ReasonOrderIssue      = "order_issue"
 	ReasonReturn          = "return"
@@ -123,12 +125,127 @@ const (
 	ReasonOther           = "other"
 )
 
-// DOBRequiredFor returns true for reasons where staff needs to verify
-// identity before sharing order details.
-func DOBRequiredFor(reason string) bool {
-	switch reason {
-	case ReasonOrderIssue, ReasonReturn, ReasonPayment:
-		return true
+// TenantReasons is the per-tenant whitelist of intake reasons + the
+// subset that triggers the date-of-birth verification step on the
+// intake form. The widget sends `X-Tenant-ID` and a reason string;
+// this table is the backend's single source of truth for "is this
+// reason valid for this tenant" and "does this reason demand a DOB".
+//
+// Keys MUST match the tenantId the @tesserix/otto-widget wrapper
+// passes (see slm-support-platform/docs/per-product-slm-mcp-routing.md
+// for the canonical list). An unknown tenant falls back to the
+// marketplace whitelist for backwards-compatibility.
+var TenantReasons = map[string]struct {
+	Whitelist  map[string]bool
+	NeedsDOB   map[string]bool
+}{
+	"mark8ly": {
+		Whitelist: map[string]bool{
+			ReasonOrderIssue:      true,
+			ReasonReturn:          true,
+			ReasonPayment:         true,
+			ReasonProductQuestion: true,
+			ReasonOther:           true,
+		},
+		NeedsDOB: map[string]bool{
+			ReasonOrderIssue: true,
+			ReasonReturn:     true,
+			ReasonPayment:    true,
+		},
+	},
+	"fanzone": {
+		Whitelist: map[string]bool{
+			"account_issue":    true,
+			"points_question":  true,
+			"prediction_issue": true,
+			"match_question":   true,
+			"bug_report":       true,
+			"other":            true,
+		},
+		// No DOB lookups — FanZone identifies users by Firebase UID,
+		// not by birthday. Asking for DOB on a sports site is creepy.
+		NeedsDOB: map[string]bool{},
+	},
+	"homechef": {
+		Whitelist: map[string]bool{
+			"order_tracking":  true,
+			"delivery_issue":  true,
+			"refund":          true,
+			"chef_question":   true,
+			"account_issue":   true,
+			"other":           true,
+		},
+		NeedsDOB: map[string]bool{},
+	},
+	"stockpilot": {
+		Whitelist: map[string]bool{
+			"portfolio_question": true,
+			"broker_connection":  true,
+			"ai_agent_issue":     true,
+			"billing":            true,
+			"bug_report":         true,
+			"other":              true,
+		},
+		NeedsDOB: map[string]bool{},
+	},
+	"gameverse": {
+		Whitelist: map[string]bool{
+			"game_rules":           true,
+			"multiplayer_issue":    true,
+			"leaderboard_question": true,
+			"account_issue":        true,
+			"bug_report":           true,
+			"other":                true,
+		},
+		NeedsDOB: map[string]bool{},
+	},
+	"horoscope": {
+		Whitelist: map[string]bool{
+			"chart_question":   true,
+			"reading_question": true,
+			"scan_issue":       true,
+			"account_issue":    true,
+			"billing":          true,
+			"other":            true,
+		},
+		NeedsDOB: map[string]bool{},
+	},
+	"scrapper": {
+		Whitelist: map[string]bool{
+			"scrape_job_issue":   true,
+			"ai_analysis_issue":  true,
+			"publishing_issue":   true,
+			"account_connection": true,
+			"billing":            true,
+			"other":              true,
+		},
+		NeedsDOB: map[string]bool{},
+	},
+}
+
+// fallbackTenant is the marketplace shape, used when X-Tenant-ID is
+// absent or unrecognised. Keeping it as a separate constant avoids a
+// hidden allocation on the hot path.
+const fallbackTenant = "mark8ly"
+
+// IsReasonAllowed returns true when the (tenant, reason) pair is in the
+// whitelist. Unknown tenants fall back to the marketplace whitelist
+// (legacy storefront clients that don't yet send X-Tenant-ID).
+func IsReasonAllowed(tenantID, reason string) bool {
+	rules, ok := TenantReasons[tenantID]
+	if !ok {
+		rules = TenantReasons[fallbackTenant]
 	}
-	return false
+	return rules.Whitelist[reason]
+}
+
+// DOBRequiredFor returns true for reasons where staff needs to verify
+// identity before sharing order details. The lookup is tenant-aware:
+// only mark8ly's order/return/payment reasons currently demand DOB.
+func DOBRequiredFor(tenantID, reason string) bool {
+	rules, ok := TenantReasons[tenantID]
+	if !ok {
+		rules = TenantReasons[fallbackTenant]
+	}
+	return rules.NeedsDOB[reason]
 }

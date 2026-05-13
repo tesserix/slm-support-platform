@@ -136,7 +136,16 @@ type createRequest struct {
 }
 
 func (h *StorefrontHandler) create(c *gin.Context) {
+	// Tenant resolution order: the JWT-derived tenant takes priority
+	// (it's set by the auth middleware from a signed token and can't
+	// be spoofed), with the X-Tenant-ID header from the widget as a
+	// fallback for storefronts that don't yet authenticate on the
+	// intake call. The header is the standard widget-side contract —
+	// see @tesserix/otto-widget which sends it on every Otto call.
 	tenantID := c.GetString(auth.CtxTenantID)
+	if tenantID == "" {
+		tenantID = c.GetHeader("X-Tenant-ID")
+	}
 	storeID := c.GetString(auth.CtxStoreID)
 
 	var body createRequest
@@ -160,18 +169,28 @@ func (h *StorefrontHandler) create(c *gin.Context) {
 	}
 
 	// Intake is mandatory: every new case carries a reason + status so
-	// the case lands in the inbox with context. DOB is only required
-	// when the reason implies an order/account lookup — product
-	// questions shouldn't demand PII.
+	// the case lands in the inbox with context. The (tenant, reason)
+	// pair must be in the per-tenant whitelist (see model.go's
+	// TenantReasons) so a fanzone customer can't smuggle in a mark8ly
+	// reason and vice versa. DOB is only demanded when the reason is
+	// flagged as needing an account/order lookup, which is currently
+	// mark8ly-only.
 	if body.Reason == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "reason_required"})
+		return
+	}
+	if !IsReasonAllowed(tenantID, body.Reason) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error":   "reason_invalid",
+			"message": "Reason is not allowed for this product.",
+		})
 		return
 	}
 	if body.StatusInfo == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "status_required"})
 		return
 	}
-	if DOBRequiredFor(body.Reason) && body.DOB == "" {
+	if DOBRequiredFor(tenantID, body.Reason) && body.DOB == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error":   "dob_required",
 			"message": "Date of birth is required for order-related cases.",
