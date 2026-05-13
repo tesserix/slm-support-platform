@@ -88,12 +88,41 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: publish
+      - name: publish to GitHub Packages
         if: steps.gate.outputs.already-published == 'false'
         working-directory: packages/otto-widget
         run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Mirror to public npm so consumers that can't auth to GitHub
+      # Packages (e.g. tesserix-home, which uses public npm for
+      # @tesserix/web already) can install the widget the standard way.
+      # NPM_TOKEN must be set in the repo secrets — an automation token
+      # on the @tesserix npm org with publish permission. The step is
+      # a no-op when the token is empty so a forked repo / fresh fork
+      # without the secret doesn't fail the run.
+      - name: gate public npm version
+        id: gate-public
+        if: steps.gate.outputs.already-published == 'false'
+        run: |
+          NAME=$(node -p "require('./packages/otto-widget/package.json').name")
+          if [ -z "${{ secrets.NPM_TOKEN }}" ]; then
+            echo "skip-public=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::NPM_TOKEN not set — skipping public npm publish."
+          elif npm view "$NAME@$NEW_VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "skip-public=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$NAME@$NEW_VERSION already on public npm — skipping."
+          else
+            echo "skip-public=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: publish to public npm
+        if: steps.gate.outputs.already-published == 'false' && steps.gate-public.outputs.skip-public == 'false'
+        working-directory: packages/otto-widget
+        run: npm publish --registry=https://registry.npmjs.org --access=public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: commit version bump
         if: github.event_name == 'workflow_dispatch' && inputs.bump != 'none' && steps.gate.outputs.already-published == 'false'
