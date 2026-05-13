@@ -48,6 +48,31 @@ The host is responsible for wiring its `/api/otto/*` and
 `/api/admin/otto/*` routes to the backend Otto service with the right
 tenant/store headers. The package ships no assumptions about auth.
 
+## Per-product props (v0.3.0)
+
+Three props differ per product:
+
+| Prop | Purpose |
+|---|---|
+| `tenantId` | Forwarded as `X-Tenant-ID` on every Otto REST call. Picks the per-product SLM, MCP server, reason whitelist, and RAG namespace on the backend. Required for any non-marketplace product. |
+| `reasons` | Per-product intake-reason list. Each option may set `requiresDob` (account/order lookup) and/or `requiresStatus: false` (quick-ask — hides the "current status / one-line summary" field). Always put a `general_question` option at the top so a customer can fire a one-liner without filling the status field. |
+| `statusPlaceholder` | Domain-shaped example text for the status field. Defaults to a marketplace example (`Order #2041 arrived damaged`) — every non-marketplace product MUST override this. |
+
+```tsx
+const FANZONE_REASONS: readonly ReasonOption[] = [
+  { value: "general_question", label: "Ask a quick question", requiresStatus: false },
+  { value: "points_question", label: "Points or leaderboard question" },
+  // …
+];
+
+<OttoWidget
+  apiBaseUrl="/api/otto"
+  tenantId="fanzone"
+  reasons={FANZONE_REASONS}
+  statusPlaceholder="e.g. Points not updating after IPL #2042"
+/>
+```
+
 ## Theming
 
 Both components expose a handful of CSS custom properties (prefixed

@@ -67,14 +67,19 @@ gives it product-specific facts at inference time:
 The MCP tools are versioned, side-effect-free, and tenant-scoped — a
 fanzone conversation cannot ever invoke a mark8ly tool.
 
-## Frontend contract (in place now — v0.2.0 of `@tesserix/otto-widget`)
+## Frontend contract (in place now — v0.3.0 of `@tesserix/otto-widget`)
 
-Every product wrapper passes two product-specific props:
+Every product wrapper passes three product-specific props:
 
 ```ts
 import { OttoWidget, type ReasonOption } from "@tesserix/otto-widget";
 
 const FANZONE_REASONS: readonly ReasonOption[] = [
+  // `requiresStatus: false` is the quick-ask path — the "current
+  // status / one-line summary" field is hidden and the backend skips
+  // its check. Every product keeps a `general_question` entry at the
+  // top so a fan can fire off a one-liner without a second form input.
+  { value: "general_question", label: "Ask a quick question", requiresStatus: false },
   { value: "account_issue", label: "Account / login issue" },
   { value: "points_question", label: "Points or leaderboard question" },
   // …
@@ -84,6 +89,9 @@ const FANZONE_REASONS: readonly ReasonOption[] = [
   apiBaseUrl="/api/otto"
   tenantId="fanzone"
   reasons={FANZONE_REASONS}
+  // Per-product example text. Never use the marketplace default
+  // ("Order #2041 arrived damaged") in a non-marketplace product.
+  statusPlaceholder="e.g. Points not updating after IPL #2042"
   // …customerName, customerEmail, productName
 />
 ```
@@ -92,6 +100,19 @@ The widget forwards `tenantId` as `X-Tenant-ID` on every Otto REST call
 (see `packages/otto-widget/src/api.ts`). The reasons are sent in the
 intake body and end up on the conversation document for the SLM to use
 as routing context.
+
+### Quick-ask reason (`general_question`)
+
+Every tenant whitelists `general_question` and lists it as the first
+reason. It's the one path where:
+
+- the status field is hidden in the widget,
+- `StatusRequiredFor(tenant, reason)` returns false on the backend so
+  the storefront handler accepts an empty `status_info`,
+- DOB is never asked (no `requiresDob: true`).
+
+The conversation still carries `tenant_id`, so the SLM and MCP routing
+behave the same as any other reason — only the intake gates relax.
 
 ### Tenant IDs
 
@@ -105,65 +126,82 @@ as routing context.
 | Tesserix Horoscope | `horoscope` |
 | Social Media Scrapper | `scrapper` |
 
-## Backend contract (what exists, what still needs to be built)
+## Backend contract — current state
 
-### Done
+### Shipped (live in prod)
 
-- The Otto service trusts the `X-Tenant-ID` header from the proxy layer
-  (Istio gateway → Next.js `/api/otto` proxy → Otto). Every conversation
-  is created with `tenant_id` on the document — see
+- **Tenant header trust.** The Otto service reads `X-Tenant-ID` from
+  the proxy layer (Istio gateway → Next.js `/api/otto` proxy → Otto).
+  Every conversation is created with `tenant_id` on the document — see
   `services/otto/internal/conversation/model.go`.
-- The intake validator only enforces `reason != ""`, `status_info != ""`,
-  and DOB-when-required. It accepts any reason string, so per-product
-  reasons from the widget are not rejected.
+- **Per-tenant reason whitelist + DOB rules + status-required rules.**
+  `TenantReasons` in `model.go` is the single source of truth.
+  `IsReasonAllowed`, `DOBRequiredFor`, and `StatusRequiredFor`
+  enforce the contract; unknown tenants fall back to mark8ly. Each
+  tenant lists `general_question` so the quick-ask path is universal.
+- **slm-router with per-tenant routing.** `slm-router` subscribes to
+  the otto MongoDB change stream (single-node `rs0`, headless service +
+  postStart `rs.initiate()`), looks up the tenant's prompt + MCP +
+  embedder config, and posts the assistant reply back.
+- **One MCP per product namespace.** Same `mcp-gateway` image is
+  deployed into each product namespace; `MCP_TENANT` selects the tool
+  set. Service DNS is `<tenant>-mcp.<tenant>.svc.cluster.local:8765`.
+  Currently live: mark8ly, fanzone, homechef, gameverse, stockpilot,
+  horoscope — image pinned to `main-f8789c4` because GAR pull-through
+  caches by digest, so a floating `main` tag silently goes stale.
+- **JSON-RPC 2.0 over plain POST at `/mcp`.** The slm-router doesn't
+  speak FastMCP streamable HTTP (session ids, SSE, 307 redirects), so
+  the mcp-gateway exposes a plain JSON-RPC handler that implements
+  `initialize`, `tools/list`, and `tools/call`. FastMCP streamable can
+  be mounted later at `/streamable` for a more capable client.
+- **Cross-namespace NetworkPolicy.** `support-platform` is whitelisted
+  in each product namespace's `allow-<product>-ingress` policy (see
+  `tesserix-k8s/charts/thirdparty/istio-config/templates/network-policies.yaml`).
+  Without that whitelist, slm-router → `<tenant>-mcp` traffic gets
+  RST by kube-proxy at the destination side and tool discovery fails
+  silently — the router falls back to "no tools" instead of erroring.
+- **pgvector RAG per tenant.** Each tenant's knowledge base lands in
+  `chunks.tenant_id = '<tenant>'` rows of the shared CNPG
+  `support-platform-postgres` database; retrieval is filtered by
+  `tenant_id` so a fanzone conversation never sees a mark8ly chunk.
+  Embeddings come from TEI (`{"inputs": [...]}` request shape, bare
+  `[[float]]` response).
+- **Nightly export ↔ fine-tune feedback.** Closed conversations are
+  exported per-tenant to `gs://tesseract-prod-otto-exports-in/<tenant>/<YYYY-MM-DD>.jsonl`;
+  the LoRA training pipeline picks up only the matching tenant's
+  shard, so cross-contamination is structurally impossible.
 
-### To do (Phase-2 work, tracked under `slm-support-platform/phase2-optimizations`)
+### Still to build
 
-- **Tenant-scoped reason whitelist.** Replace the hardcoded
-  `ReasonOrderIssue / ReasonReturn / …` consts in
-  `conversation/model.go` with a per-tenant lookup. Source of truth is
-  this doc; backend mirrors the same labels.
-- **SLM selection.** Today the slm-router uses a single inference
-  deployment. Add `tenant_id`-aware routing so each tenant points at its
-  own LoRA-on-shared-base or its own model snapshot. The router contract
-  is described in `slm-router/internal/router/route.go`.
-- **MCP server per tenant.** Each product gets its own MCP server (see
-  `scrapper-mcp` as the reference pattern — it's already deployed in
-  the `scrapper` namespace). The Otto agent fetches the
-  `tenant_id`-matched MCP endpoint from the slm-router and binds tools
-  scoped to that tenant.
-- **RAG index per tenant.** Each tenant's knowledge base (product docs,
-  FAQs, support transcripts) lands in its own pgvector collection.
-  Naming: `kb_<tenant_id>`. The retrieval step runs against the
-  collection chosen by `tenant_id`; never across tenants.
-- **Conversation export ↔ training feedback.** Closed cases for tenant
-  X are exported nightly into the tenant-X fine-tune dataset only —
-  never mixed across products. Cross-contamination is the single most
-  expensive thing to roll back later.
+- **Real MCP tool implementations.** Current tools return stub JSON
+  with `"_stub": true`; each needs to call the matching product's
+  backend (order-service, match-service, portfolio-service, etc.).
+- **Per-tenant LoRA fine-tunes.** Shared qwen2.5-1.5b base + per-tenant
+  4-bit QLoRA adapter; needs ≥1k resolved conversations + GPU time.
+  Until then every tenant runs on the shared base model + per-tenant
+  system prompt.
 
 ### Acceptance test for end-to-end routing
 
-Once the backend work above lands, this should hold for every product:
-
 ```bash
-# Fanzone tenant
+# Fanzone — quick-ask path. No status_info required because the reason
+# is general_question.
 curl -sX POST https://fanzonebattleground.com/api/otto/conversations \
   -H 'Content-Type: application/json' \
   -H 'X-Tenant-ID: fanzone' \
-  -d '{"reason":"account_issue","status_info":"can\'t log in"}' \
-  | jq '.routing'
-# expect: { "tenant": "fanzone", "slm_model": "otto-fanzone-…",
-#           "mcp_endpoint": "https://fanzone-mcp.support-platform…" }
+  -d '{"reason":"general_question","message":"How do I check my points?"}'
+# expect 201 + a conversation that gets an AI reply from the fanzone
+# system prompt + fanzone-mcp tool calls + fanzone-namespaced RAG.
 
-# Stockpilot tenant on the same Otto deployment
+# Stockpilot — structured intake path.
 curl -sX POST https://stockpilot.tesserix.app/api/otto/conversations \
   -H 'Content-Type: application/json' \
   -H 'X-Tenant-ID: stockpilot' \
-  -d '{"reason":"broker_connection","status_info":"alpaca handshake timing out"}' \
-  | jq '.routing'
-# expect: { "tenant": "stockpilot", "slm_model": "otto-stockpilot-…",
-#           "mcp_endpoint": "https://stockpilot-mcp.support-platform…" }
+  -d '{"reason":"broker_connection","status_info":"alpaca handshake timing out","message":"My Alpaca account is not syncing"}'
+# expect 201 + reply that calls stockpilot-mcp's broker tools.
 ```
 
-The widget side of the contract is already deployed (v0.2.0). The
-backend side is the next milestone for slm-support-platform.
+The widget side of the contract is deployed at v0.3.0; the backend
+side (per-tenant whitelist, per-tenant MCP, RAG, export pipeline) is
+shipped. Real tool implementations and per-tenant LoRA adapters are
+the remaining work.
