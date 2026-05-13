@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tesserix/slm-support-platform/services/otto/internal/auth"
+	"github.com/tesserix/slm-support-platform/services/otto/internal/changestream"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/config"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/conversation"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/httpserver"
@@ -131,6 +132,18 @@ func main() {
 		SweepInterval:    60 * time.Second,
 	}
 	go sweeper.Run(ctx)
+
+	// Mongo change-stream watcher — rebroadcasts inserts on `messages`
+	// and updates on `conversations` to the WebSocket hub so writes
+	// from slm-router (assistant replies, status flips to active) hit
+	// the customer browser in real time. Without this the widget only
+	// sees those changes on a manual refresh.
+	watcher := &changestream.Watcher{
+		DB:     mongoClient.DB(),
+		Hub:    h,
+		Logger: log,
+	}
+	go watcher.Run(ctx)
 
 	// WebSocket routes are deliberately mounted on a no-middleware group:
 	// Istio routes /api/v1/otto/.../ws directly to Otto, bypassing the
