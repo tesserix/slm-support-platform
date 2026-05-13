@@ -21,7 +21,14 @@ type PromptBuilder struct{}
 // Build assembles: system prompt, retrieved RAG chunks, conversation
 // history (oldest first), and the new customer message. Returns the
 // messages array ready for inference.Client.Chat.
-func (PromptBuilder) Build(systemPrompt string, chunks []retriever.Chunk, history []otto.HistoryMessage, customerMessage string) []inference.Message {
+//
+// The customer identity (user_id / email / name) is appended to the
+// system prompt as a "Customer:" block. Tools like get_user_points
+// take a user_id argument and the SLM MUST pass the customer's REAL
+// id, not invent one — otherwise the tool returns someone else's
+// data or 404s. Putting the id at the top of the prompt grounds the
+// model on the right value.
+func (PromptBuilder) Build(systemPrompt string, customer otto.CustomerIdentity, chunks []retriever.Chunk, history []otto.HistoryMessage, customerMessage string) []inference.Message {
 	msgs := make([]inference.Message, 0, 2+len(history))
 
 	// Compose the system prompt with retrieved context appended. Keep
@@ -29,6 +36,18 @@ func (PromptBuilder) Build(systemPrompt string, chunks []retriever.Chunk, histor
 	// what's its baked-in knowledge.
 	var b strings.Builder
 	b.WriteString(systemPrompt)
+	if customer.UserID != "" || customer.Email != "" {
+		b.WriteString("\n\nCustomer (use these EXACT values for any tool argument named user_id, customer_id, or email — never invent or guess them):\n")
+		if customer.UserID != "" {
+			fmt.Fprintf(&b, "- user_id: %s\n", customer.UserID)
+		}
+		if customer.Email != "" {
+			fmt.Fprintf(&b, "- email: %s\n", customer.Email)
+		}
+		if customer.Name != "" {
+			fmt.Fprintf(&b, "- name: %s\n", customer.Name)
+		}
+	}
 	if len(chunks) > 0 {
 		b.WriteString("\n\nRelevant context from product documentation:\n")
 		for i, c := range chunks {

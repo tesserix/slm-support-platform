@@ -9,10 +9,16 @@ shape stay the same so the SLM doesn't need re-training.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
+
 from .config import Config
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(mcp, cfg: Config) -> None:
@@ -25,13 +31,13 @@ def register(mcp, cfg: Config) -> None:
         "gameverse": _register_gameverse,
         "horoscope": _register_horoscope,
         "scrapper": _register_scrapper,
-    }[cfg.tenant](mcp)
+    }[cfg.tenant](mcp, cfg)
 
 
 # ---------------------------------------------------------------------------
 # mark8ly — marketplace e-commerce
 # ---------------------------------------------------------------------------
-def _register_mark8ly(mcp) -> None:
+def _register_mark8ly(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_order",
         description=(
@@ -94,62 +100,97 @@ def _register_mark8ly(mcp) -> None:
 # ---------------------------------------------------------------------------
 # fanzone — cricket fan platform
 # ---------------------------------------------------------------------------
-def _register_fanzone(mcp) -> None:
+def _register_fanzone(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_user_points",
-        description="Return the user's current points balance, weekly delta, and leaderboard rank.",
+        description=(
+            "Return the user's CURRENT points balance from the fanzone-user "
+            "service. Always pass the conversation customer's user_id "
+            "exactly as it appears on the conversation document — never "
+            "make one up."
+        ),
     )
     async def get_user_points(user_id: str) -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "points": 1240,
-            "delta_7d": 180,
-            "leaderboard_rank": 4_217,
-            "tier": "silver",
-            "_stub": True,
-        }
+        # GET http://fanzone-user.fanzone.svc.cluster.local
+        #     /api/v1/users/{user_id}/points
+        # returns: {"balance": int, "total_earned": int, "total_spent": int}
+        url = f"{cfg.fanzone_user_url}/api/v1/users/{user_id}/points"
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                res = await client.get(url)
+            if res.status_code == 200:
+                body = res.json()
+                return {
+                    "user_id": user_id,
+                    "balance": body.get("balance", 0),
+                    "total_earned": body.get("total_earned", 0),
+                    "total_spent": body.get("total_spent", 0),
+                    "source": "fanzone-user",
+                }
+            return {
+                "user_id": user_id,
+                "error": "lookup_failed",
+                "status": res.status_code,
+                "source": "fanzone-user",
+            }
+        except httpx.HTTPError as exc:
+            logger.warning("get_user_points failed: %s", exc)
+            return {
+                "user_id": user_id,
+                "error": "backend_unreachable",
+                "detail": str(exc),
+                "source": "fanzone-user",
+            }
 
     @mcp.tool(
         name="get_match_info",
-        description="Look up an IPL/T20/ODI match by id. Returns status, score, toss, and play state.",
+        description=(
+            "Look up an IPL/T20/ODI match by id from sports-data. Returns "
+            "live score, teams, toss, venue."
+        ),
     )
     async def get_match_info(match_id: str) -> dict[str, Any]:
-        return {
-            "match_id": match_id,
-            "tournament": "IPL 2026",
-            "teams": {"home": "MI", "away": "CSK"},
-            "status": "live",
-            "score": {"MI": {"runs": 142, "wickets": 4, "overs": 16.2}, "CSK": None},
-            "toss": {"winner": "MI", "decision": "bat"},
-            "venue": "Wankhede Stadium",
-            "_stub": True,
-        }
+        url = f"{cfg.fanzone_match_url}/api/v1/cricket/matches/{match_id}"
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                res = await client.get(url)
+            if res.status_code == 200:
+                return {
+                    "match_id": match_id,
+                    "result": res.json(),
+                    "source": "sports-data",
+                }
+            return {"match_id": match_id, "error": "lookup_failed", "status": res.status_code}
+        except httpx.HTTPError as exc:
+            logger.warning("get_match_info failed: %s", exc)
+            return {"match_id": match_id, "error": "backend_unreachable", "detail": str(exc)}
 
     @mcp.tool(
         name="list_user_predictions",
         description="Return the user's recent prediction picks, locked status, and settled outcome.",
     )
     async def list_user_predictions(user_id: str, limit: int = 5) -> dict[str, Any]:
-        return {
-            "user_id": user_id,
-            "predictions": [
-                {
-                    "match_id": "IPL-2026-042",
-                    "question": "Match winner",
-                    "pick": "MI",
-                    "locked": True,
-                    "settled": False,
-                    "stake_points": 50,
+        url = f"{cfg.fanzone_prediction_url}/api/v1/predictions/users/{user_id}"
+        params = {"limit": max(1, min(limit, 25))}
+        try:
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                res = await client.get(url, params=params)
+            if res.status_code == 200:
+                return {
+                    "user_id": user_id,
+                    "predictions": res.json(),
+                    "source": "fanzone-prediction",
                 }
-            ][:limit],
-            "_stub": True,
-        }
+            return {"user_id": user_id, "error": "lookup_failed", "status": res.status_code}
+        except httpx.HTTPError as exc:
+            logger.warning("list_user_predictions failed: %s", exc)
+            return {"user_id": user_id, "error": "backend_unreachable", "detail": str(exc)}
 
 
 # ---------------------------------------------------------------------------
 # homechef — food delivery
 # ---------------------------------------------------------------------------
-def _register_homechef(mcp) -> None:
+def _register_homechef(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_order_status",
         description="Look up a HomeChef order by id. Returns status, ETA, chef, items and live driver location if available.",
@@ -197,7 +238,7 @@ def _register_homechef(mcp) -> None:
 # ---------------------------------------------------------------------------
 # stockpilot — AI stock analysis
 # ---------------------------------------------------------------------------
-def _register_stockpilot(mcp) -> None:
+def _register_stockpilot(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_portfolio_summary",
         description="Snapshot of the user's portfolio: equity, buying power, top holdings, daily P/L.",
@@ -253,7 +294,7 @@ def _register_stockpilot(mcp) -> None:
 # ---------------------------------------------------------------------------
 # gameverse — multiplayer board games
 # ---------------------------------------------------------------------------
-def _register_gameverse(mcp) -> None:
+def _register_gameverse(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_room_state",
         description="Snapshot of a game room: players, turn order, last move, current game state.",
@@ -311,7 +352,7 @@ def _register_gameverse(mcp) -> None:
 # ---------------------------------------------------------------------------
 # horoscope — astrology
 # ---------------------------------------------------------------------------
-def _register_horoscope(mcp) -> None:
+def _register_horoscope(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_chart_summary",
         description="Sun/moon/ascendant + dominant element/modality. Tradition: 'western' or 'vedic'.",
@@ -362,7 +403,7 @@ def _register_horoscope(mcp) -> None:
 # ---------------------------------------------------------------------------
 # scrapper — social media intel
 # ---------------------------------------------------------------------------
-def _register_scrapper(mcp) -> None:
+def _register_scrapper(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="get_scrape_job",
         description="State of a single scrape job: progress, profile count, errors per platform.",

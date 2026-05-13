@@ -176,7 +176,11 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 	if err != nil {
 		log.Warn("history load failed", "err", err.Error())
 	}
-	msgs := PromptBuilder{}.Build(systemPrompt, topChunks, history, ev.Body)
+	customer, err := o.deps.Otto.Customer(ctx, ev.ConversationID)
+	if err != nil {
+		log.Warn("customer load failed, prompt will lack identity", "err", err.Error())
+	}
+	msgs := PromptBuilder{}.Build(systemPrompt, customer, topChunks, history, ev.Body)
 
 	// 5. Discover tools for this tenant.
 	tools, toolMap, err := o.resolveTools(ctx, ev.TenantID, product.MCPServers)

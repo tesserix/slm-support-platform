@@ -38,6 +38,19 @@ class Config:
     # slm-router's MONGO_URI.
     mongo_url: str | None
     mongo_db: str
+    # Per-tenant backend URLs. The MCP tools use these to call into
+    # the product's own services (e.g. fanzone-user for points,
+    # mark8ly orders for order lookups). Defaults match the in-cluster
+    # service DNS so a typical deploy doesn't need to set anything.
+    fanzone_user_url: str
+    fanzone_match_url: str
+    fanzone_prediction_url: str
+    mark8ly_orders_url: str
+    homechef_api_url: str
+    stockpilot_api_url: str
+    gameverse_server_url: str
+    horoscope_api_url: str
+    scrapper_api_url: str
 
 
 def load() -> Config:
@@ -58,4 +71,40 @@ def load() -> Config:
         embedder_url=(os.environ.get("EMBEDDER_URL") or "").rstrip("/") or None,
         mongo_url=os.environ.get("MONGO_URL") or None,
         mongo_db=os.environ.get("MONGO_DB", "otto"),
+        fanzone_user_url=os.environ.get(
+            "FANZONE_USER_URL",
+            "http://fanzone-user.fanzone.svc.cluster.local",
+        ).rstrip("/"),
+        fanzone_match_url=os.environ.get(
+            "FANZONE_MATCH_URL",
+            "http://sports-data.fanzone.svc.cluster.local",
+        ).rstrip("/"),
+        fanzone_prediction_url=os.environ.get(
+            "FANZONE_PREDICTION_URL",
+            "http://fanzone-prediction.fanzone.svc.cluster.local",
+        ).rstrip("/"),
+        mark8ly_orders_url=os.environ.get(
+            "MARK8LY_ORDERS_URL",
+            "http://mp-orders.marketplace.svc.cluster.local",
+        ).rstrip("/"),
+        homechef_api_url=os.environ.get(
+            "HOMECHEF_API_URL",
+            "http://homechef-api.homechef.svc.cluster.local",
+        ).rstrip("/"),
+        stockpilot_api_url=os.environ.get(
+            "STOCKPILOT_API_URL",
+            "http://stockpilot-api.stockpilot.svc.cluster.local",
+        ).rstrip("/"),
+        gameverse_server_url=os.environ.get(
+            "GAMEVERSE_SERVER_URL",
+            "http://gameverse-server.gameverse.svc.cluster.local",
+        ).rstrip("/"),
+        horoscope_api_url=os.environ.get(
+            "HOROSCOPE_API_URL",
+            "http://horoscope-api.horoscope.svc.cluster.local",
+        ).rstrip("/"),
+        scrapper_api_url=os.environ.get(
+            "SCRAPPER_API_URL",
+            "http://scrapper-api.scrapper.svc.cluster.local",
+        ).rstrip("/"),
     )

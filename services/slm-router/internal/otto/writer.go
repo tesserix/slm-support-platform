@@ -33,6 +33,21 @@ type Writer interface {
 	// conversation, ordered oldest-first (ready for direct
 	// concatenation into the model's messages array).
 	RecentMessages(ctx context.Context, conversationID string, limit int) ([]HistoryMessage, error)
+	// Customer returns the identifying details of the customer who
+	// opened the conversation. Empty struct (no error) is returned for
+	// anonymous threads or conversations that don't exist yet.
+	Customer(ctx context.Context, conversationID string) (CustomerIdentity, error)
+}
+
+// CustomerIdentity is the subset of conversation.customer the
+// orchestrator needs to ground tool calls. UserID is the *internal*
+// product user id (firebase uid / Keycloak sub / UUID — whatever the
+// product's auth issued). The MCP tools accept it verbatim — the
+// fanzone-user service for example does `WHERE id = $1`.
+type CustomerIdentity struct {
+	UserID string
+	Email  string
+	Name   string
 }
 
 // HistoryMessage is one row of the conversation history.
@@ -184,6 +199,37 @@ func (w *MongoWriter) MarkNeedsHuman(ctx context.Context, conversationID, reason
 		return fmt.Errorf("conversation %s not found", conversationID)
 	}
 	return nil
+}
+
+// Customer fetches the customer identity off a conversation. Used by
+// the orchestrator to seed the system prompt with the real user_id /
+// email / name so the SLM passes them to MCP tools verbatim instead
+// of inventing values.
+func (w *MongoWriter) Customer(ctx context.Context, conversationID string) (CustomerIdentity, error) {
+	if conversationID == "" {
+		return CustomerIdentity{}, nil
+	}
+	var doc struct {
+		Customer struct {
+			UserID string `bson:"user_id,omitempty"`
+			Email  string `bson:"email,omitempty"`
+			Name   string `bson:"name,omitempty"`
+		} `bson:"customer"`
+	}
+	err := w.db.Collection("conversations").
+		FindOne(ctx, bson.M{"_id": conversationID}).
+		Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return CustomerIdentity{}, nil
+		}
+		return CustomerIdentity{}, fmt.Errorf("load customer: %w", err)
+	}
+	return CustomerIdentity{
+		UserID: doc.Customer.UserID,
+		Email:  doc.Customer.Email,
+		Name:   doc.Customer.Name,
+	}, nil
 }
 
 var _ Writer = (*MongoWriter)(nil)
