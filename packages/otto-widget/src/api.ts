@@ -62,20 +62,32 @@ export interface OttoApi {
  * In the admin app — or any future host — swap the base and the calls work
  * identically.
  */
-export function buildOttoApi(baseUrl: string): OttoApi {
+export function buildOttoApi(baseUrl: string, tenantId?: string): OttoApi {
   const base = baseUrl.replace(/\/+$/, "");
+  // X-Tenant-ID lets the backend route the request to the per-product
+  // SLM and MCP knowledge base. Set by the host app from a stable
+  // product identifier ("fanzone", "homechef", "stockpilot", etc.). If
+  // omitted the backend falls back to its default tenant (mark8ly's
+  // marketplace shape) — which is why every non-marketplace product
+  // MUST pass tenantId explicitly.
+  const tenantHeader: Record<string, string> = tenantId
+    ? { "X-Tenant-ID": tenantId }
+    : {};
   const post = async <T,>(path: string, body?: unknown): Promise<T> => {
     const res = await fetch(`${base}${path}`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...tenantHeader },
       body: body ? JSON.stringify(body) : undefined,
     });
     if (!res.ok) throw await toError(res);
     return (await res.json()) as T;
   };
   const get = async <T,>(path: string): Promise<T> => {
-    const res = await fetch(`${base}${path}`, { credentials: "include" });
+    const res = await fetch(`${base}${path}`, {
+      credentials: "include",
+      headers: tenantHeader,
+    });
     if (!res.ok) throw await toError(res);
     return (await res.json()) as T;
   };

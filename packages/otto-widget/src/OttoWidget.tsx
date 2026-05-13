@@ -18,22 +18,34 @@ import type {
 } from "./types";
 import { useOttoChannel } from "./useOttoChannel";
 
-// Fixed set of intake reasons. Must match
-// services/otto/internal/conversation/model.go — the backend rejects
-// anything outside this list (via DOBRequiredFor and friends).
-const REASON_OPTIONS = [
+// Intake reason shape — each option is a value/label pair the backend
+// recognises, plus a flag that toggles the date-of-birth field on the
+// intake form (we only ask for DOB when the conversation is going to
+// look up an account — orders, returns, payments — not for a generic
+// product question).
+//
+// The shape is exported so host apps can build product-specific menus.
+// Each product (fanzone, homechef, stockpilot, …) maintains its own
+// list because a marketplace's "Order issue" makes no sense to a
+// stock-analysis user. Backend tenants accept their own reason values
+// — see slm-support-platform/services/otto/internal/conversation
+// /model.go for the per-tenant whitelist.
+export interface ReasonOption {
+  value: string;
+  label: string;
+  requiresDob?: boolean;
+}
+
+// Default reasons match the marketplace shape Otto was originally
+// designed for (mark8ly storefront). Any non-marketplace consumer
+// MUST pass its own `reasons` prop.
+const DEFAULT_REASON_OPTIONS: readonly ReasonOption[] = [
   { value: "order_issue", label: "Order issue", requiresDob: true },
   { value: "return", label: "Return / refund", requiresDob: true },
   { value: "payment", label: "Payment problem", requiresDob: true },
   { value: "product_question", label: "Product question", requiresDob: false },
   { value: "other", label: "Something else", requiresDob: false },
 ] as const;
-
-type ReasonValue = (typeof REASON_OPTIONS)[number]["value"];
-
-function reasonRequiresDob(reason: string): boolean {
-  return REASON_OPTIONS.some((r) => r.value === reason && r.requiresDob);
-}
 
 // The widget talks to the host app over /api/otto (REST) and /api/otto/ws
 // (WebSocket). Hosts configure both paths via props so they can mount the
@@ -61,6 +73,18 @@ export interface OttoWidgetProps {
   style?: CSSProperties;
   /** Optional theme — maps to CSS custom properties. */
   theme?: Partial<OttoTheme>;
+  /** Intake reasons shown in the "What can we help with?" dropdown.
+   *  Each product passes its own list so the menu matches the domain
+   *  (e.g. stockpilot doesn't show "Order issue"). The values are
+   *  forwarded to the backend, which validates them against the
+   *  tenant's whitelist. If omitted, the marketplace defaults are used. */
+  reasons?: readonly ReasonOption[];
+  /** Stable per-product tenant identifier (e.g. "mark8ly", "fanzone",
+   *  "homechef", "stockpilot", "gameverse", "horoscope", "scrapper").
+   *  Sent as the `X-Tenant-ID` header on every Otto API call so the
+   *  service can route the conversation to the right per-product SLM
+   *  + MCP knowledge base. Required for anything other than mark8ly. */
+  tenantId?: string;
 }
 
 export interface OttoTheme {
@@ -104,8 +128,19 @@ export function OttoWidget({
   customerEmail,
   style,
   theme,
+  reasons = DEFAULT_REASON_OPTIONS,
+  tenantId,
 }: OttoWidgetProps) {
-  const api = useMemo(() => buildOttoApi(apiBaseUrl), [apiBaseUrl]);
+  const api = useMemo(
+    () => buildOttoApi(apiBaseUrl, tenantId),
+    [apiBaseUrl, tenantId],
+  );
+  // Look up DOB requirement off the configured reasons list — every
+  // product can mark its own "needs an account lookup" reasons.
+  const reasonRequiresDob = useCallback(
+    (value: string) => reasons.some((r) => r.value === value && r.requiresDob),
+    [reasons],
+  );
   // The WS ticket endpoint is always the same-origin REST proxy, so the
   // Next.js layer can attach our auth cookie + internal-auth header.
   const ticketUrl = useMemo(() => {
@@ -133,7 +168,7 @@ export function OttoWidget({
   // Intake form — collected on the first screen, sent with the
   // startConversation call. The backend validates reason + status
   // are non-empty and dob is present when the reason demands it.
-  const [reason, setReason] = useState<ReasonValue | "">("");
+  const [reason, setReason] = useState<string>("");
   const [statusInfo, setStatusInfo] = useState("");
   const [dob, setDob] = useState("");
   const [otpDigits, setOtpDigits] = useState<string[]>(() =>
@@ -578,13 +613,13 @@ export function OttoWidget({
                   id="otto-reason"
                   className="otto-widget__input"
                   value={reason}
-                  onChange={(e) => setReason(e.target.value as ReasonValue | "")}
+                  onChange={(e) => setReason(e.target.value as string)}
                   disabled={busy}
                   required
                   aria-label="Reason"
                 >
                   <option value="">Select a reason…</option>
-                  {REASON_OPTIONS.map((r) => (
+                  {reasons.map((r) => (
                     <option key={r.value} value={r.value}>
                       {r.label}
                     </option>
@@ -860,6 +895,7 @@ export function OttoWidget({
               {fbSubmitted ? (
                 <ClosedCaseSummary
                   conversation={conversation}
+                  reasons={reasons}
                   onStartNew={() => {
                     // Start fresh — new intake, new case, new
                     // position in the queue. Closed cases cannot be
@@ -983,9 +1019,11 @@ export function OttoWidget({
 function ClosedCaseSummary({
   conversation,
   onStartNew,
+  reasons,
 }: {
   conversation: Conversation | null;
   onStartNew: () => void;
+  reasons: readonly ReasonOption[];
 }) {
   if (!conversation) {
     return (
@@ -999,8 +1037,8 @@ function ClosedCaseSummary({
   }
   const closedByInactivity = Boolean(conversation.inactivity_closed_at);
   const closedAt = conversation.closed_at ?? conversation.inactivity_closed_at;
-  const reasonLabel = conversation.intake
-    ? REASON_LABEL[conversation.intake.reason] ?? conversation.intake.reason
+  const labelForReason = conversation.intake
+    ? reasonLabel(reasons, conversation.intake.reason)
     : null;
   return (
     <div className="otto-widget__summary">
@@ -1019,10 +1057,10 @@ function ClosedCaseSummary({
             <dd>{conversation.case_id}</dd>
           </div>
         )}
-        {reasonLabel && (
+        {labelForReason && (
           <div>
             <dt>Reason</dt>
-            <dd>{reasonLabel}</dd>
+            <dd>{labelForReason}</dd>
           </div>
         )}
         {conversation.intake?.status && (
@@ -1062,15 +1100,11 @@ function ClosedCaseSummary({
   );
 }
 
-// REASON_LABEL mirrors REASON_OPTIONS above — kept as a lookup so the
-// summary screen doesn't pull in the full options array.
-const REASON_LABEL: Record<string, string> = {
-  order_issue: "Order issue",
-  return: "Return / refund",
-  payment: "Payment problem",
-  product_question: "Product question",
-  other: "Something else",
-};
+// Per-render lookup so the summary screen can show the human-readable
+// label for whichever `reasons` list the host configured.
+function reasonLabel(reasons: readonly ReasonOption[], value: string): string {
+  return reasons.find((r) => r.value === value)?.label ?? value;
+}
 
 // FeedbackStars renders a 1-5 star picker for a single survey
 // question. We store 0 as "not answered" so the backend can

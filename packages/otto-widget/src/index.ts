@@ -1,5 +1,9 @@
 export { OttoWidget } from "./OttoWidget";
-export type { OttoWidgetProps, OttoTheme } from "./OttoWidget";
+export type {
+  OttoWidgetProps,
+  OttoTheme,
+  ReasonOption,
+} from "./OttoWidget";
 export { OttoInbox } from "./OttoInbox";
 export type { OttoInboxProps } from "./OttoInbox";
 export { useOttoChannel } from "./useOttoChannel";
