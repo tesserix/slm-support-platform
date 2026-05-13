@@ -300,7 +300,25 @@ func (h *StorefrontHandler) create(c *gin.Context) {
 		return
 	}
 
-	setSessionCookie(c, h.d.CookieName, raw, h.d.CookieDomain, h.d.CookieSecure, tok.Expiry)
+	// Cookie domain resolution — per-product so a fanzone session
+	// cookie never reaches mark8ly and vice versa.
+	//
+	//  1. Trust the X-Cookie-Domain header when the product's Next.js
+	//     proxy sets it (e.g. ".fanzonebattleground.com" to cover www.).
+	//  2. Otherwise leave the Domain attribute empty: the cookie
+	//     becomes host-only and is scoped to whatever origin the
+	//     browser used (which is the product's own domain, since the
+	//     widget always talks same-origin via /api/otto).
+	//
+	// The static h.d.CookieDomain config remains the FINAL fallback
+	// (kept for backwards compatibility with single-tenant deployments)
+	// but is intentionally left blank in the multi-product chart so
+	// per-product scoping is the default.
+	cookieDomain := strings.TrimSpace(c.GetHeader("X-Cookie-Domain"))
+	if cookieDomain == "" {
+		cookieDomain = h.d.CookieDomain
+	}
+	setSessionCookie(c, h.d.CookieName, raw, cookieDomain, h.d.CookieSecure, tok.Expiry)
 
 	// Notify any staff already watching the inbox that a new pending thread
 	// has arrived. Delivery is best-effort.
