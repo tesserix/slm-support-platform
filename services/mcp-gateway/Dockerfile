@@ -5,8 +5,11 @@ FROM python:3.12-slim AS builder
 WORKDIR /build
 COPY pyproject.toml ./
 COPY src/ ./src/
+# Regular install (not editable) so the package + deps actually land
+# at the target path. `--target` + `-e` produces a .egg-link that
+# resolves to a path that doesn't exist in the runtime image.
 RUN pip install --no-cache-dir --upgrade pip \
- && pip install --no-cache-dir --target /pkg -e .
+ && pip install --no-cache-dir --target /pkg .
 
 FROM python:3.12-slim AS runtime
 ENV PYTHONUNBUFFERED=1 \
