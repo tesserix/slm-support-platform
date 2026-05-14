@@ -141,6 +141,18 @@ type ProductConfig struct {
 	// conversation). When unset, escalation just flips needs_human
 	// in Otto and emits the soft hand-off message — no ticket.
 	EscalationHook EscalationHook `yaml:"escalation_hook"`
+
+	// Optional callback hit when the FIRST customer message of a
+	// conversation lands. Used to log "new chat started" in the
+	// product's own DB so the merchant has visibility outside of
+	// Otto's admin inbox — e.g. fanzone logs to its support_events
+	// table, mark8ly creates a draft ticket immediately rather than
+	// waiting for an escalation that may never come. Same JSON
+	// payload shape as EscalationHook minus `escalation_reason`.
+	// When unset, the chat lives only in Otto until/unless an
+	// escalation fires later. The endpoint MUST be idempotent on
+	// conversation_id — slm-router retries on transient failure.
+	ChatStartedHook EscalationHook `yaml:"chat_started_hook"`
 }
 
 // EscalationHook configures the per-tenant ticket-creation callback.

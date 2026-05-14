@@ -51,3 +51,13 @@ products:
         - "allergic reaction"
         - "lawyer"
       max_tool_failures: 2
+    # Fires when the FIRST customer message of a conversation lands.
+    # Lets the product log "new chat started" in its own DB so the
+    # team has visibility outside Otto's admin inbox. Endpoint MUST
+    # be idempotent on conversation_id (slm-router retries on
+    # transient failure). Same JSON shape as escalation_hook, minus
+    # the `escalation_reason` field.
+    chat_started_hook:
+      url: http://homechef-api.homechef.svc.cluster.local/internal/v1/support/chats
+      auth_header: X-Internal-Auth
+      auth_env_var: HOMECHEF_INTERNAL_AUTH

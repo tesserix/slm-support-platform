@@ -120,6 +120,18 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 		return o.escalate(ctx, ev, "unknown_tenant")
 	}
 	log = log.With("product", productName)
+
+	// Fire the per-tenant "chat started" hook the moment we see the
+	// first customer message of a conversation. Lets the product's
+	// own backend log the chat in its own systems — visibility
+	// outside of Otto's admin inbox. Detection is by message count:
+	// when only this one message exists, the conversation just
+	// started. Best-effort — hook failures are logged but never
+	// halt the orchestrator (the chat still gets answered).
+	if product.ChatStartedHook.URL != "" {
+		o.fireChatStartedHookIfFirst(ctx, ev, product)
+	}
+
 	evaluator := escalation.New(product.Escalation)
 
 	// Pre-check: keywords and explicit human requests bypass the model.
@@ -311,47 +323,82 @@ func (o *Orchestrator) escalate(ctx context.Context, ev watcher.CustomerMessage,
 	return nil
 }
 
+// fireChatStartedHookIfFirst fires the per-tenant "new chat started"
+// hook when ev is the first customer message in its conversation.
+// Wrapper around fireHook with `escalation_reason` deliberately
+// omitted (the merchant gets the same context shape as an escalation
+// but without the human-handoff signal — this is purely a log/notify
+// event). Detection: count messages in the conversation; if exactly
+// 1, this insert IS that one. The recent-history fetch is best-
+// effort — on failure we still fire the hook with empty history.
+func (o *Orchestrator) fireChatStartedHookIfFirst(
+	ctx context.Context, ev watcher.CustomerMessage, product config.ProductConfig,
+) {
+	history, _ := o.deps.Otto.RecentMessages(ctx, ev.ConversationID, 2)
+	if len(history) > 1 {
+		return // not the first message — likely a reconnect or a follow-up
+	}
+	o.fireHook(ctx, "chat_started", ev, product.ChatStartedHook, "")
+}
+
 func (o *Orchestrator) fireEscalationHook(
 	ctx context.Context, ev watcher.CustomerMessage, reason string, product config.ProductConfig,
 ) {
-	hook := product.EscalationHook
+	o.fireHook(ctx, "escalation", ev, product.EscalationHook, reason)
+}
+
+// fireHook is the common POST machinery shared between
+// fireEscalationHook and fireChatStartedHookIfFirst. The two hook
+// shapes are deliberately identical (same JSON keys, same auth) so
+// product endpoints can share parsing — they differ only in whether
+// `escalation_reason` is set.
+func (o *Orchestrator) fireHook(
+	ctx context.Context,
+	kind string,
+	ev watcher.CustomerMessage,
+	hook config.EscalationHook,
+	escalationReason string,
+) {
 	if hook.URL == "" {
 		return
 	}
 	log := slog.With(
 		"service", "slm-router",
+		"hook_kind", kind,
 		"conversation_id", ev.ConversationID,
 		"tenant_id", ev.TenantID,
 		"hook_url", hook.URL,
 	)
-	// Pull customer + recent history so the ticket lands with
-	// useful context (subject = first customer message; description
-	// = full transcript). Both are best-effort.
+	// Reuse the same payload-building helpers the escalation hook
+	// uses so the merchant gets a consistent shape across both
+	// hook kinds. Both fetches are best-effort.
 	customer, _ := o.deps.Otto.Customer(ctx, ev.ConversationID)
 	history, _ := o.deps.Otto.RecentMessages(ctx, ev.ConversationID, historyLimit)
 	subject := truncate(ev.Body, 280)
 	description := renderTranscript(history, ev.Body)
 
 	payload := map[string]any{
-		"conversation_id":   ev.ConversationID,
-		"tenant_id":         ev.TenantID,
-		"store_id":          ev.StoreID,
-		"customer_name":     customer.Name,
-		"customer_email":    customer.Email,
-		"subject":           subject,
-		"description":       description,
-		"escalation_reason": reason,
+		"conversation_id": ev.ConversationID,
+		"tenant_id":       ev.TenantID,
+		"store_id":        ev.StoreID,
+		"customer_name":   customer.Name,
+		"customer_email":  customer.Email,
+		"subject":         subject,
+		"description":     description,
+	}
+	if escalationReason != "" {
+		payload["escalation_reason"] = escalationReason
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
-		log.Warn("escalation hook marshal failed", "err", err.Error())
+		log.Warn("hook marshal failed", "err", err.Error())
 		return
 	}
 	hookCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(hookCtx, http.MethodPost, hook.URL, bytes.NewReader(body))
 	if err != nil {
-		log.Warn("escalation hook build failed", "err", err.Error())
+		log.Warn("hook build failed", "err", err.Error())
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
@@ -362,15 +409,15 @@ func (o *Orchestrator) fireEscalationHook(
 	}
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Warn("escalation hook POST failed", "err", err.Error())
+		log.Warn("hook POST failed", "err", err.Error())
 		return
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
-		log.Warn("escalation hook rejected", "status", res.StatusCode)
+		log.Warn("hook rejected", "status", res.StatusCode)
 		return
 	}
-	log.Info("escalation hook fired", "status", res.StatusCode)
+	log.Info("hook fired", "status", res.StatusCode)
 }
 
 func truncate(s string, max int) string {
