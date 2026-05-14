@@ -1,0 +1,67 @@
+# Phase 4 bootstrap spec — horoscope customer-read auto-tools.
+# Predictions are always to be wrapped in the "for entertainment /
+# self-reflection only" disclaimer downstream of the SLM.
+openapi: "3.0.3"
+info:
+  title: horoscope customer-read auto-tools
+  version: "0.1.0"
+  description: |
+    Bootstrap OpenAPI surface for the horoscope tenant. Endpoints
+    are user-scoped — the backend reads identity from X-User-Id, so
+    the SLM has to pass user_id as a query/path parameter and the
+    backend resolves the chart from that. Future auth-propagation
+    work will move user_id to a header injected by mcp-gateway.
+
+servers:
+  - url: http://horoscope-api.horoscope.svc.cluster.local
+    description: horoscope-api
+
+paths:
+  /api/v1/users/{user_id}/chart:
+    get:
+      operationId: autoGetChartSummary
+      x-mcp-expose: customer-read
+      summary: Customer's birth-chart summary.
+      description: |
+        Sun / Moon / Ascendant + dominant element / modality. Use
+        `tradition=western` (default) or `tradition=vedic` to pick
+        the interpretive layer.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: tradition
+          in: query
+          schema: {type: string, enum: [western, vedic], default: western}
+  /api/v1/users/{user_id}/today:
+    get:
+      operationId: autoGetTodaysTransit
+      x-mcp-expose: customer-read
+      summary: Today's transit reading for the customer.
+      description: |
+        Current planetary positions relative to the customer's birth
+        chart, with the day's most-prominent aspect. Updates every
+        24h.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/v1/users/{user_id}/readings:
+    get:
+      operationId: autoListRecentReadings
+      x-mcp-expose: customer-read
+      summary: Customer's recent saved readings.
+      description: |
+        Last 20 readings the customer has generated, reverse-
+        chronological. Each includes the prompt, the chart used,
+        and the rendered interpretation text.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 20}

@@ -37,7 +37,12 @@ from urllib.parse import urljoin
 import httpx
 
 from .config import Config
-from .openapi_loader import ExposedOperation, extract_exposed_operations, fetch_spec
+from .openapi_loader import (
+    ExposedOperation,
+    extract_exposed_operations,
+    fetch_spec,
+    load_spec_from_file,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -79,15 +84,32 @@ async def register(reg: Any, cfg: Config) -> int:
     constant per pod (set via env var at deploy time), not derived
     from the customer context.
     """
-    if not cfg.openapi_urls:
+    if not cfg.openapi_urls and not cfg.openapi_files:
         return 0
 
     registered = 0
+    # URL-backed specs come first (live-served by a backend that
+    # owns its own contract). File-backed specs are the bootstrap
+    # path before a backend has stood that up — they sit behind
+    # URL-based ones so a freshly-tagged real endpoint wins over a
+    # stale checked-in YAML.
     for url in cfg.openapi_urls:
         spec = await fetch_spec(url)
         if spec is None:
             continue
         base_url = _server_url_from_spec(spec, fallback=url)
+        for op in extract_exposed_operations(spec, base_url=base_url):
+            if _register_one(reg, op, headers=cfg.openapi_backend_headers):
+                registered += 1
+
+    for path in cfg.openapi_files:
+        spec = load_spec_from_file(path)
+        if spec is None:
+            continue
+        # File specs have no fetch URL to fall back to for the base —
+        # they must declare `servers[0].url` explicitly (typically
+        # the in-cluster service DNS for that backend).
+        base_url = _server_url_from_spec(spec, fallback="")
         for op in extract_exposed_operations(spec, base_url=base_url):
             if _register_one(reg, op, headers=cfg.openapi_backend_headers):
                 registered += 1

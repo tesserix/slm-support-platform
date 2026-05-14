@@ -27,6 +27,14 @@ COPY --from=builder /pkg /pkg
 # Kargo promotion atomic (server + docs + ingest move together).
 COPY docs/ /app/docs/
 COPY scripts/ /app/scripts/
+# Per-tenant OpenAPI specs the runtime gateway loads when
+# MCP_OPENAPI_FILES points at /app/openapi/<tenant>/spec.yaml.
+# Each tenant has its own file so the same image works for every
+# tenant (the deploy-time value picks the file). Once a backend
+# stands up its own /openapi.json route, switch the env from
+# MCP_OPENAPI_FILES to MCP_OPENAPI_URLS for that tenant and delete
+# the file on the next image build.
+COPY openapi/ /app/openapi/
 
 # Read-only root + non-root uid — same conventions as the rest of
 # the support-platform deployments.

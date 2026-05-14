@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 
+from pathlib import Path
+
 import httpx
 import pytest
 import respx
@@ -18,6 +20,7 @@ from mcp_gateway.openapi_loader import (
     MCP_EXPOSE_EXTENSION,
     extract_exposed_operations,
     fetch_spec,
+    load_spec_from_file,
 )
 
 
@@ -258,3 +261,65 @@ def test_extract_json_roundtrip_is_stable() -> None:
     )
     roundtripped = json.loads(json.dumps(spec))
     assert extract_exposed_operations(spec) == extract_exposed_operations(roundtripped)
+
+
+# -----------------------------------------------------------------------------
+# load_spec_from_file — Phase 4 file-backed bootstrap path.
+# -----------------------------------------------------------------------------
+def test_load_spec_from_file_yaml(tmp_path: Path) -> None:
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text(
+        "openapi: '3.0.3'\n"
+        "info:\n"
+        "  title: t\n"
+        "  version: '0'\n"
+        "paths:\n"
+        "  /x:\n"
+        "    get:\n"
+        "      operationId: getX\n"
+        "      x-mcp-expose: customer-read\n"
+        "      parameters: []\n"
+    )
+    out = load_spec_from_file(str(spec_path))
+    assert out is not None
+    assert out["openapi"] == "3.0.3"
+    assert "/x" in out["paths"]
+
+
+def test_load_spec_from_file_json(tmp_path: Path) -> None:
+    """JSON-extension files take the JSON path. Content-sniff is by
+    leading `{`, so a JSON file with explicit braces is handled
+    correctly even without the right extension."""
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text('{"openapi": "3.0.0", "info": {"title": "t"}, "paths": {}}')
+    out = load_spec_from_file(str(spec_path))
+    assert out is not None
+    assert out["openapi"] == "3.0.0"
+
+
+def test_load_spec_from_file_missing_returns_none() -> None:
+    assert load_spec_from_file("/nonexistent/spec.yaml") is None
+
+
+def test_load_spec_from_file_bad_yaml_returns_none(tmp_path: Path) -> None:
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text("openapi: '3.0.0'\n  bad: [unclosed list\n")
+    assert load_spec_from_file(str(spec_path)) is None
+
+
+def test_load_spec_from_file_bad_json_returns_none(tmp_path: Path) -> None:
+    spec_path = tmp_path / "spec.json"
+    spec_path.write_text("{ not valid json")
+    assert load_spec_from_file(str(spec_path)) is None
+
+
+def test_load_spec_from_file_wrong_shape_returns_none(tmp_path: Path) -> None:
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text("openapi: '3.0.0'\ninfo:\n  title: t\n")  # no `paths`
+    assert load_spec_from_file(str(spec_path)) is None
+
+
+def test_load_spec_from_file_swagger2_rejected(tmp_path: Path) -> None:
+    spec_path = tmp_path / "spec.yaml"
+    spec_path.write_text("swagger: '2.0'\npaths:\n  /x: {}\n")
+    assert load_spec_from_file(str(spec_path)) is None

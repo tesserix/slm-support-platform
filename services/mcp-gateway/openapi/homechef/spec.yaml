@@ -1,0 +1,76 @@
+# Phase 4 bootstrap spec — homechef customer-read auto-tools.
+openapi: "3.0.3"
+info:
+  title: homechef customer-read auto-tools
+  version: "0.1.0"
+  description: |
+    Bootstrap OpenAPI surface for the homechef tenant. Endpoints
+    mirror the ones the hand-rolled tools in tenants.py already use.
+    Operation IDs are camelCased+prefixed `auto` so they don't shadow
+    the hand-rolled tools — both are available; the auto ones become
+    authoritative once homechef-api owns its own /openapi.json.
+
+servers:
+  - url: http://homechef-api.homechef.svc.cluster.local
+    description: homechef-api — orders, chefs, delivery
+
+paths:
+  /api/v1/orders/{order_id}:
+    get:
+      operationId: autoGetOrder
+      x-mcp-expose: customer-read
+      summary: Order status, items, totals, ETA.
+      description: |
+        Single source of truth for a HomeChef order. Includes the
+        chef, the customer, current status, ETA, and item list.
+        Use the order ID from the customer's session — never make
+        one up.
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/v1/orders/{order_id}/track:
+    get:
+      operationId: autoTrackDelivery
+      x-mcp-expose: customer-read
+      summary: Live driver location for an in-flight order.
+      description: |
+        Last reported lat/lng of the assigned driver plus the
+        recomputed ETA. Returns 404 if the order has no driver
+        assigned yet (status is still "preparing").
+      parameters:
+        - name: order_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/v1/chefs/{chef_id}:
+    get:
+      operationId: autoGetChefAvailability
+      x-mcp-expose: customer-read
+      summary: Is the chef accepting orders + next delivery window.
+      description: |
+        Useful when the customer asks about a specific chef before
+        ordering. Combines the chef's active flag with the next
+        time slot they have capacity for.
+      parameters:
+        - name: chef_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/v1/users/{user_id}/orders:
+    get:
+      operationId: autoListRecentOrders
+      x-mcp-expose: customer-read
+      summary: Customer's recent HomeChef orders.
+      description: |
+        Last 10 orders by default. Useful when the customer asks
+        "how do I reorder that thing from last week?".
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 10}

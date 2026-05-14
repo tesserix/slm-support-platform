@@ -46,6 +46,14 @@ class Config:
     # gateway only serves hand-rolled tools (current default while
     # backends are still being annotated).
     openapi_urls: tuple[str, ...]
+    # Local file paths to OpenAPI specs the gateway loads at startup
+    # (in addition to whatever URLs it fetches). Used for the
+    # bootstrap phase: each tenant's spec is checked into
+    # `services/mcp-gateway/openapi/<tenant>/spec.yaml` and baked
+    # into the image so the gateway can auto-register tools without
+    # the backend yet owning a live `/openapi.json` route. Migrate to
+    # `openapi_urls` per-tenant once the backend serves the spec.
+    openapi_files: tuple[str, ...]
     # Static headers attached to every backend call the auto-tools
     # make. Format: `Key: Value, Other: Value2`. Used to forward
     # shared-secret headers that gate the backend routes — e.g.
@@ -86,6 +94,7 @@ def load() -> Config:
         mongo_url=os.environ.get("MONGO_URL") or None,
         mongo_db=os.environ.get("MONGO_DB", "otto"),
         openapi_urls=_split_csv(os.environ.get("MCP_OPENAPI_URLS", "")),
+        openapi_files=_split_csv(os.environ.get("MCP_OPENAPI_FILES", "")),
         openapi_backend_headers=_split_headers(os.environ.get("MCP_OPENAPI_HEADERS", "")),
         fanzone_user_url=os.environ.get(
             "FANZONE_USER_URL",

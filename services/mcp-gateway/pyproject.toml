@@ -9,6 +9,11 @@ dependencies = [
   "psycopg[binary]>=3.2,<3.3",
   "starlette>=0.40,<1",
   "uvicorn>=0.30,<1",
+  # PyYAML is only needed by openapi_loader.load_spec_from_file
+  # when reading YAML-format specs. Light-weight enough to make it
+  # a hard dep so file-backed Phase 4 specs Just Work without a
+  # separate install step.
+  "pyyaml>=6,<7",
 ]
 
 [project.optional-dependencies]

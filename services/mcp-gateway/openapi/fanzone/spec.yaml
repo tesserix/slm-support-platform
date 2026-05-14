@@ -1,0 +1,73 @@
+# Phase 4 bootstrap spec — fanzone read endpoints exposed as MCP tools.
+#
+# Operation IDs are camelCased and prefixed with `auto` so they don't
+# shadow the hand-rolled `get_user_points` / `get_match_info` /
+# `list_user_predictions` tools defined in `tenants.py`. Once a
+# fanzone backend serves its own `/openapi.json` we'll switch the
+# pod's `MCP_OPENAPI_FILES` for `MCP_OPENAPI_URLS`, drop this file
+# from the image, and the hand-rolled tools can be retired in
+# favour of the live spec.
+#
+# Every server URL points at the existing in-cluster service DNS the
+# hand-rolled tools already hit — same auth surface, same data.
+openapi: "3.0.3"
+info:
+  title: fanzone customer-read auto-tools
+  version: "0.1.0"
+  description: |
+    Bootstrap OpenAPI surface for the fanzone tenant. Sourced from the
+    existing tool URLs in services/mcp-gateway/src/mcp_gateway/tenants.py
+    until the fanzone-user / sports-data / fanzone-prediction services
+    own their own OpenAPI specs.
+
+servers:
+  - url: http://fanzone-user.fanzone.svc.cluster.local
+    description: fanzone-user — points, profile
+
+paths:
+  /api/v1/users/{user_id}/points:
+    get:
+      operationId: autoGetUserPointsBalance
+      x-mcp-expose: customer-read
+      summary: Current points balance for a customer.
+      description: |
+        Snapshot of the user's points wallet. Pass the conversation
+        customer's user_id exactly — never invent one.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+          description: Stable fanzone user id from the customer's session.
+  /api/v1/users/{user_id}/points/history:
+    get:
+      operationId: autoGetUserPointsHistory
+      x-mcp-expose: customer-read
+      summary: Recent points transactions for a customer.
+      description: |
+        Last N points-affecting events: predictions settled, bonuses
+        awarded, redemptions. Useful when the customer asks "where
+        did those points come from?".
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: days
+          in: query
+          schema: {type: integer, default: 7}
+          description: Lookback window in days. Capped at 30 server-side.
+  /api/v1/users/{user_id}/profile:
+    get:
+      operationId: autoGetUserProfile
+      x-mcp-expose: customer-read
+      summary: Customer's public fanzone profile.
+      description: |
+        Display name, avatar, joined date, favourite teams. Useful
+        when the SLM needs to ground itself in who it's talking to
+        before answering an open-ended question.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}

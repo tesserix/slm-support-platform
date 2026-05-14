@@ -1,0 +1,68 @@
+# Phase 4 bootstrap spec — scrapper customer-read auto-tools.
+openapi: "3.0.3"
+info:
+  title: scrapper customer-read auto-tools
+  version: "0.1.0"
+  description: |
+    Bootstrap OpenAPI surface for the scrapper tenant. Read-only
+    queries against the scrapper-api's REST surface. Mutating
+    operations (start job, configure pipeline) are intentionally
+    out of scope — those need a confirm-before-call flow we haven't
+    added to auto-tools yet.
+
+servers:
+  - url: http://scrapper-api.scrapper.svc.cluster.local
+    description: scrapper-api
+
+paths:
+  /api/jobs/{job_id}:
+    get:
+      operationId: autoGetScrapeJob
+      x-mcp-expose: customer-read
+      summary: Current state of a scrape job.
+      description: |
+        Progress, item count, per-platform errors, current stage.
+        Useful when the customer asks "where is my export?".
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/jobs:
+    get:
+      operationId: autoListRecentScrapeJobs
+      x-mcp-expose: customer-read
+      summary: Recent scrape jobs for the calling user.
+      description: |
+        Reverse-chronological list of the user's jobs. The backend
+        scopes by the authenticated principal; mcp-gateway runs as
+        a service identity, so this returns the per-namespace
+        recent jobs rather than per-user. Filter with `status` to
+        narrow.
+      parameters:
+        - name: limit
+          in: query
+          schema: {type: integer, default: 20}
+        - name: status
+          in: query
+          schema: {type: string, enum: [queued, running, failed, completed]}
+  /api/campaigns:
+    get:
+      operationId: autoListPublishingPipelines
+      x-mcp-expose: customer-read
+      summary: List configured publishing pipelines.
+      description: |
+        Each campaign is a publishing pipeline that takes scraped
+        items and writes them somewhere (sheet, S3, webhook). Use
+        this to answer "what do my pipelines look like?".
+      parameters: []
+  /api/accounts:
+    get:
+      operationId: autoListConnectedAccounts
+      x-mcp-expose: customer-read
+      summary: Source platform accounts the user has connected.
+      description: |
+        Platforms (Twitter / Instagram / Reddit / etc.) the user
+        has linked to scrapper, plus their last-used timestamp and
+        token health.
+      parameters: []

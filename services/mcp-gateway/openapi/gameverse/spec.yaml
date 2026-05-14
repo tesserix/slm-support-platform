@@ -1,0 +1,66 @@
+# Phase 4 bootstrap spec — gameverse customer-read auto-tools.
+#
+# gameverse-server is largely WebSocket-driven, but the Rust HTTP
+# side exposes a handful of read endpoints for account + leaderboard
+# queries that DON'T need the live socket. Those are what the SLM
+# can grab via auto-tools to ground answers about matches, ratings
+# and account state.
+openapi: "3.0.3"
+info:
+  title: gameverse customer-read auto-tools
+  version: "0.1.0"
+  description: |
+    Bootstrap OpenAPI surface for gameverse. Read-only HTTP
+    endpoints exposed by gameverse-server for the SLM to query.
+    Live room state still streams via WS — that path is not in
+    scope for auto-tools.
+
+servers:
+  - url: http://gameverse-server.gameverse.svc.cluster.local
+    description: gameverse-server
+
+paths:
+  /api/v1/users/{user_id}/rating:
+    get:
+      operationId: autoGetUserRating
+      x-mcp-expose: customer-read
+      summary: Current ranked rating for a user.
+      description: |
+        Glicko-2 rating + rating-deviation. Useful when the customer
+        asks "what's my current rating?" or wants to compare with a
+        friend's published rating.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/v1/users/{user_id}/matches:
+    get:
+      operationId: autoListMatchHistory
+      x-mcp-expose: customer-read
+      summary: Customer's recent match history.
+      description: |
+        Last N matches with opponent, result, and rating delta.
+        Reverse-chronological by default. Capped to 50 server-side.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 20}
+  /api/v1/users/{user_id}/profile:
+    get:
+      operationId: autoGetGameverseProfile
+      x-mcp-expose: customer-read
+      summary: Public profile for a gameverse user.
+      description: |
+        Display name, region, total matches played, current rating
+        band. Useful for grounding open-ended questions about a
+        user's standing.
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: {type: string}

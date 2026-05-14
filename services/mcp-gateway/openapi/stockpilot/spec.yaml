@@ -1,0 +1,61 @@
+# Phase 4 bootstrap spec — stockpilot customer-read auto-tools.
+# All tools return data the SLM must wrap in a "not financial advice"
+# disclaimer per the existing hand-rolled tool conventions.
+openapi: "3.0.3"
+info:
+  title: stockpilot customer-read auto-tools
+  version: "0.1.0"
+  description: |
+    Bootstrap OpenAPI surface for the stockpilot tenant. Surfaces
+    portfolio + broker connection state for the SLM to ground
+    answers in. Trading itself is OUT OF SCOPE — every exposed
+    operation is read-only.
+
+servers:
+  - url: http://stockpilot-api.stockpilot.svc.cluster.local
+    description: stockpilot-api — portfolios, brokers, trades
+
+paths:
+  /api/portfolios/{account_id}:
+    get:
+      operationId: autoGetPortfolioSummary
+      x-mcp-expose: customer-read
+      summary: Snapshot of the customer's portfolio.
+      description: |
+        Equity, buying power, top holdings, daily P/L. Pass the
+        user's stockpilot account_id from the conversation context.
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema: {type: string}
+  /api/portfolios/{account_id}/trades:
+    get:
+      operationId: autoListRecentTrades
+      x-mcp-expose: customer-read
+      summary: Recent trade activity on an account.
+      description: |
+        Most recent fills (buys + sells), reverse-chronological.
+        Useful when the customer asks "what did I buy this week?".
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema: {type: string}
+        - name: limit
+          in: query
+          schema: {type: integer, default: 25}
+  /api/broker/alpaca/accounts/{account_id}:
+    get:
+      operationId: autoGetBrokerStatus
+      x-mcp-expose: customer-read
+      summary: Brokerage account status (Alpaca).
+      description: |
+        Connection health + account-level flags (e.g. pattern-day-
+        trader, margin enabled, cash held). Returns 404 if the
+        customer hasn't linked Alpaca yet.
+      parameters:
+        - name: account_id
+          in: path
+          required: true
+          schema: {type: string}

@@ -17,10 +17,11 @@ from mcp_gateway.server import ToolRegistry
 
 @dataclasses.dataclass
 class _FakeCfg:
-    """Minimal stand-in for Config that only carries the two fields
+    """Minimal stand-in for Config that only carries the fields
     auto_tools.register cares about. Not frozen because dict-valued
     fields make hash() unstable — these tests don't need it either way."""
-    openapi_urls: tuple[str, ...]
+    openapi_urls: tuple[str, ...] = ()
+    openapi_files: tuple[str, ...] = ()
     openapi_backend_headers: dict = dataclasses.field(default_factory=dict)
 
 

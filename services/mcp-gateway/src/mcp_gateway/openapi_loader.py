@@ -85,15 +85,68 @@ async def fetch_spec(url: str) -> dict[str, Any] | None:
         logger.warning("openapi: %s did not return JSON", url)
         return None
 
+    return _validate_spec_shape(body, source=url)
+
+
+def load_spec_from_file(path: str) -> dict[str, Any] | None:
+    """Load a spec from a local file. Mirrors fetch_spec's fail-soft
+    contract for the file path: a missing or malformed file logs a
+    warning and yields None.
+
+    Used to bootstrap auto-tools before a backend has stood up its
+    own `/openapi.json` route — each tenant's spec is baked into the
+    mcp-gateway image at `/app/openapi/<tenant>/spec.yaml`. Once a
+    backend owns its contract, switch the deploy from `*_FILES` to
+    `*_URLS` and delete the file — same loader, same downstream.
+
+    Accepts both JSON (`.json`) and YAML (`.yaml`/`.yml`) by content
+    sniffing: YAML files start with `openapi:` or `---`, JSON with `{`.
+    """
+    import json as _json
+
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        logger.warning("openapi: cannot read %s: %s", path, exc)
+        return None
+
+    stripped = raw.lstrip()
+    body: Any
+    if stripped.startswith("{"):
+        try:
+            body = _json.loads(raw)
+        except _json.JSONDecodeError as exc:
+            logger.warning("openapi: %s is not valid JSON: %s", path, exc)
+            return None
+    else:
+        try:
+            import yaml  # type: ignore[import-untyped]
+        except ImportError:
+            logger.warning("openapi: PyYAML not installed, cannot read %s", path)
+            return None
+        try:
+            body = yaml.safe_load(raw)
+        except yaml.YAMLError as exc:
+            logger.warning("openapi: %s is not valid YAML: %s", path, exc)
+            return None
+
+    return _validate_spec_shape(body, source=path)
+
+
+def _validate_spec_shape(body: Any, *, source: str) -> dict[str, Any] | None:
+    """Common shape check shared by fetch_spec + load_spec_from_file.
+    Returns the body when it looks like a 3.x OpenAPI doc, else None
+    plus a warning."""
     if not isinstance(body, dict) or "paths" not in body:
-        logger.warning("openapi: %s body has no 'paths' key", url)
+        logger.warning("openapi: %s has no 'paths' key", source)
         return None
 
     # Accept 3.0.x and 3.1.x. Swagger 2.0 has a different structure and
     # we don't auto-translate; the backend should upgrade.
     version = str(body.get("openapi", ""))
     if not version.startswith("3."):
-        logger.warning("openapi: %s is not OpenAPI 3.x (got %r)", url, version)
+        logger.warning("openapi: %s is not OpenAPI 3.x (got %r)", source, version)
         return None
 
     return body
@@ -183,4 +236,5 @@ __all__ = [
     "MCP_EXPOSE_EXTENSION",
     "extract_exposed_operations",
     "fetch_spec",
+    "load_spec_from_file",
 ]
