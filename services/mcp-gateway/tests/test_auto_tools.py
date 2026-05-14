@@ -15,11 +15,13 @@ from mcp_gateway.openapi_loader import (
 from mcp_gateway.server import ToolRegistry
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class _FakeCfg:
-    """Minimal stand-in for Config that only carries openapi_urls.
-    auto_tools.register doesn't touch the other fields."""
+    """Minimal stand-in for Config that only carries the two fields
+    auto_tools.register cares about. Not frozen because dict-valued
+    fields make hash() unstable — these tests don't need it either way."""
     openapi_urls: tuple[str, ...]
+    openapi_backend_headers: dict = dataclasses.field(default_factory=dict)
 
 
 def _spec_with_get_order() -> dict:
@@ -182,6 +184,58 @@ async def test_tool_backend_unreachable_returns_structured_error() -> None:
 
     result = await reg.call("getOrder", {"order_id": "ord_42"})
     assert result["error"] == "backend_unreachable"
+
+
+@respx.mock
+async def test_tool_forwards_static_backend_headers() -> None:
+    """When the gateway's config has `openapi_backend_headers`, the
+    auto-tool must send them on every backend call — that's how
+    shared-secret headers like X-Storefront-Key get propagated to
+    the backend without exposing them to the SLM."""
+    respx.get("https://api.fake.test/openapi.json").mock(
+        return_value=httpx.Response(200, json=_spec_with_get_order())
+    )
+    route = respx.get("https://api.fake.test/v1/orders/ord_42").mock(
+        return_value=httpx.Response(200, json={"id": "ord_42"})
+    )
+
+    reg = ToolRegistry()
+    cfg = _FakeCfg(
+        openapi_urls=("https://api.fake.test/openapi.json",),
+        openapi_backend_headers={"X-Storefront-Key": "shh", "X-Service": "mcp"},
+    )
+    await auto_tools.register(reg, cfg)
+    await reg.call("getOrder", {"order_id": "ord_42"})
+
+    assert route.called
+    sent_headers = route.calls.last.request.headers
+    assert sent_headers["X-Storefront-Key"] == "shh"
+    assert sent_headers["X-Service"] == "mcp"
+
+
+@respx.mock
+async def test_tool_does_not_send_headers_when_none_configured() -> None:
+    """The default (no configured headers) preserves the original
+    behaviour — bare GET with no extras. Important for backends like
+    fanzone-user that the SLM has been calling header-less for months."""
+    respx.get("https://api.fake.test/openapi.json").mock(
+        return_value=httpx.Response(200, json=_spec_with_get_order())
+    )
+    route = respx.get("https://api.fake.test/v1/orders/ord_42").mock(
+        return_value=httpx.Response(200, json={"id": "ord_42"})
+    )
+
+    reg = ToolRegistry()
+    cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
+    await auto_tools.register(reg, cfg)
+    await reg.call("getOrder", {"order_id": "ord_42"})
+
+    assert route.called
+    sent_headers = route.calls.last.request.headers
+    # httpx always sends host / user-agent / accept — we just want
+    # to make sure no surprise auth-ish headers slipped in.
+    assert "X-Storefront-Key" not in sent_headers
+    assert "Authorization" not in sent_headers
 
 
 @respx.mock

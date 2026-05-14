@@ -46,6 +46,12 @@ class Config:
     # gateway only serves hand-rolled tools (current default while
     # backends are still being annotated).
     openapi_urls: tuple[str, ...]
+    # Static headers attached to every backend call the auto-tools
+    # make. Format: `Key: Value, Other: Value2`. Used to forward
+    # shared-secret headers that gate the backend routes — e.g.
+    # mark8ly's storefront API requires `X-Storefront-Key`. Each pod
+    # is tenant-scoped, so this is one tenant's set of secrets.
+    openapi_backend_headers: dict[str, str]
     # Per-tenant backend URLs. The MCP tools use these to call into
     # the product's own services (e.g. fanzone-user for points,
     # mark8ly orders for order lookups). Defaults match the in-cluster
@@ -80,6 +86,7 @@ def load() -> Config:
         mongo_url=os.environ.get("MONGO_URL") or None,
         mongo_db=os.environ.get("MONGO_DB", "otto"),
         openapi_urls=_split_csv(os.environ.get("MCP_OPENAPI_URLS", "")),
+        openapi_backend_headers=_split_headers(os.environ.get("MCP_OPENAPI_HEADERS", "")),
         fanzone_user_url=os.environ.get(
             "FANZONE_USER_URL",
             "http://fanzone-user.fanzone.svc.cluster.local",
@@ -123,3 +130,22 @@ def _split_csv(raw: str) -> tuple[str, ...]:
     """Parse a CSV env var, dropping empties and whitespace. Returns a
     tuple so the Config remains hashable (it's a frozen dataclass)."""
     return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
+def _split_headers(raw: str) -> dict[str, str]:
+    """Parse a comma-separated `Key: Value, Other: Value2` env var
+    into a header dict. Malformed entries (no colon) are skipped with
+    no error — the gateway must keep starting even with a typo'd
+    secret value. Keys are case-preserved so a backend that's picky
+    about header case still gets what it expects."""
+    out: dict[str, str] = {}
+    for part in raw.split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        key, _, value = part.partition(":")
+        key = key.strip()
+        value = value.strip()
+        if key:
+            out[key] = value
+    return out

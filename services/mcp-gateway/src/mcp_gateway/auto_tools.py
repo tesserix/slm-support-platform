@@ -72,6 +72,12 @@ async def register(reg: Any, cfg: Config) -> int:
     flagged as a warning since it's almost certainly a spec bug — but
     we don't refuse to start, since the SLM is still better off with
     SOMETHING than nothing.
+
+    Backend calls include `cfg.openapi_backend_headers` on every
+    request — used for things like the `X-Storefront-Key` shared
+    secret mark8ly's storefront API requires. The headers are
+    constant per pod (set via env var at deploy time), not derived
+    from the customer context.
     """
     if not cfg.openapi_urls:
         return 0
@@ -83,13 +89,13 @@ async def register(reg: Any, cfg: Config) -> int:
             continue
         base_url = _server_url_from_spec(spec, fallback=url)
         for op in extract_exposed_operations(spec, base_url=base_url):
-            if _register_one(reg, op):
+            if _register_one(reg, op, headers=cfg.openapi_backend_headers):
                 registered += 1
 
     return registered
 
 
-def _register_one(reg: Any, op: ExposedOperation) -> bool:
+def _register_one(reg: Any, op: ExposedOperation, *, headers: dict[str, str] | None = None) -> bool:
     """Synthesise one tool from an operation and register it on `reg`.
     Returns True on success, False when the operation was skipped
     because it can't be safely synthesised (bad parameters, etc.).
@@ -103,7 +109,7 @@ def _register_one(reg: Any, op: ExposedOperation) -> bool:
         )
         return False
 
-    handler = _make_handler(op)
+    handler = _make_handler(op, headers=headers)
     # The decorator call surface ToolRegistry exposes is `tool(name=...,
     # description=...)`. The auto-generated input schema doesn't go
     # through `_build_input_schema(fn)` — the function signature would
@@ -186,12 +192,16 @@ def _normalise_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _make_handler(op: ExposedOperation):
+def _make_handler(op: ExposedOperation, *, headers: dict[str, str] | None = None):
     """Build the async function the registry will invoke when the SLM
     calls this tool. Captures `op` by closure so each tool stays
-    bound to the right URL/path/parameters.
+    bound to the right URL/path/parameters. `headers` is passed
+    through to httpx on every call — used to forward shared-secret
+    headers like `X-Storefront-Key` that gate the backend routes
+    behind a service-mesh-level trust check.
     """
     path_param_names = set(_PATH_PARAM_RE.findall(op.path))
+    static_headers = dict(headers) if headers else None
 
     async def call_backend(**kwargs: Any) -> dict[str, Any]:
         # Substitute path params into the URL template.
@@ -224,7 +234,7 @@ def _make_handler(op: ExposedOperation):
         url = _join_url(op.base_url, substituted)
         try:
             async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
-                res = await client.get(url, params=query)
+                res = await client.get(url, params=query, headers=static_headers)
         except httpx.HTTPError as exc:
             logger.warning("auto_tools: GET %s failed: %s", url, exc)
             return {
