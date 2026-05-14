@@ -20,6 +20,13 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 COPY --from=builder /pkg /pkg
+# Docs corpus + ingestion CLI ride along in the same image so the
+# CronJob can run `python scripts/ingest_docs.py` without a separate
+# build. The runtime mcp-gateway server doesn't touch these paths,
+# but they're tiny and keeping them in the same image keeps the
+# Kargo promotion atomic (server + docs + ingest move together).
+COPY docs/ /app/docs/
+COPY scripts/ /app/scripts/
 
 # Read-only root + non-root uid — same conventions as the rest of
 # the support-platform deployments.
