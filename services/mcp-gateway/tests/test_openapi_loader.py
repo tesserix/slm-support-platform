@@ -36,13 +36,13 @@ async def test_fetch_spec_network_error_returns_none() -> None:
     respx.get("https://api.test/openapi.json").mock(
         side_effect=httpx.ConnectError("backend down")
     )
-    assert await fetch_spec("https://api.test/openapi.json") is None
+    assert fetch_spec("https://api.test/openapi.json") is None
 
 
 @respx.mock
 async def test_fetch_spec_non_200_returns_none() -> None:
     respx.get("https://api.test/openapi.json").mock(return_value=httpx.Response(503))
-    assert await fetch_spec("https://api.test/openapi.json") is None
+    assert fetch_spec("https://api.test/openapi.json") is None
 
 
 @respx.mock
@@ -50,7 +50,7 @@ async def test_fetch_spec_non_json_body_returns_none() -> None:
     respx.get("https://api.test/openapi.json").mock(
         return_value=httpx.Response(200, text="<html>oops</html>")
     )
-    assert await fetch_spec("https://api.test/openapi.json") is None
+    assert fetch_spec("https://api.test/openapi.json") is None
 
 
 @respx.mock
@@ -59,7 +59,7 @@ async def test_fetch_spec_wrong_shape_returns_none() -> None:
     respx.get("https://api.test/openapi.json").mock(
         return_value=httpx.Response(200, json={"openapi": "3.0.0", "info": {}})
     )
-    assert await fetch_spec("https://api.test/openapi.json") is None
+    assert fetch_spec("https://api.test/openapi.json") is None
 
 
 @respx.mock
@@ -71,7 +71,7 @@ async def test_fetch_spec_swagger_2_rejected() -> None:
             200, json={"swagger": "2.0", "paths": {"/foo": {}}}
         )
     )
-    assert await fetch_spec("https://api.test/openapi.json") is None
+    assert fetch_spec("https://api.test/openapi.json") is None
 
 
 @respx.mock
@@ -80,7 +80,7 @@ async def test_fetch_spec_happy_path() -> None:
     respx.get("https://api.test/openapi.json").mock(
         return_value=httpx.Response(200, json=spec)
     )
-    out = await fetch_spec("https://api.test/openapi.json")
+    out = fetch_spec("https://api.test/openapi.json")
     assert out == spec
 
 

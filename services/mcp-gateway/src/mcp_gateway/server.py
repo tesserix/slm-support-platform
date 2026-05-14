@@ -18,7 +18,6 @@ same registry so behaviour stays consistent.
 """
 from __future__ import annotations
 
-import asyncio
 import inspect
 import json
 import logging
@@ -233,10 +232,11 @@ def build_registry(cfg: Config) -> ToolRegistry:
     # Auto-registered tools come LAST so a freshly-tagged OpenAPI op
     # can't accidentally shadow a hand-rolled tool with intentional
     # logic (e.g. a write tool that wraps a GET with confirmation).
-    # `auto_tools.register` is async because it has to fetch specs over
-    # HTTP — we run it on a private loop here so build_registry stays
-    # synchronous for the existing call sites.
-    auto_count = asyncio.run(auto_tools.register(reg, cfg))
+    # `auto_tools.register` is intentionally synchronous — it runs
+    # at module-import time, before uvicorn has finished spinning
+    # up its event loop, and asyncio.run() can't be called when a
+    # loop is already running (newer uvicorn does this).
+    auto_count = auto_tools.register(reg, cfg)
     if auto_count:
         logger.info(
             "auto-registered %d openapi tool(s) for tenant=%s", auto_count, cfg.tenant

@@ -61,16 +61,23 @@ class ExposedOperation:
     base_url: str = ""  # which backend's spec this came from
 
 
-async def fetch_spec(url: str) -> dict[str, Any] | None:
+def fetch_spec(url: str) -> dict[str, Any] | None:
     """Fetch an OpenAPI document. Returns the parsed dict, or None on
     any failure (network, non-2xx, non-JSON, wrong shape).
+
+    Synchronous on purpose — runs at module-import time in
+    `server.build_registry`, before uvicorn has spun up its event
+    loop. Under newer uvicorn the loop is already running by the
+    time the app module is imported, which makes `asyncio.run`
+    raise. Going sync here costs nothing (one HTTP call per spec at
+    startup, never on the customer hot path).
 
     Never raises — callers iterate over multiple backends and a single
     bad one must not crash startup.
     """
     try:
-        async with httpx.AsyncClient(timeout=_FETCH_TIMEOUT_SECONDS) as client:
-            res = await client.get(url)
+        with httpx.Client(timeout=_FETCH_TIMEOUT_SECONDS) as client:
+            res = client.get(url)
     except httpx.HTTPError as exc:
         logger.warning("openapi: failed to fetch %s: %s", url, exc)
         return None

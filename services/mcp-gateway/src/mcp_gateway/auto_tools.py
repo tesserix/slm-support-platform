@@ -67,7 +67,7 @@ _ALLOWED_SCHEMA_TYPES = {"string", "integer", "number", "boolean", "array", "obj
 _PATH_PARAM_RE = re.compile(r"\{([^{}/]+)\}")
 
 
-async def register(reg: Any, cfg: Config) -> int:
+def register(reg: Any, cfg: Config) -> int:
     """Pull every URL in `cfg.openapi_urls`, expose the tagged
     operations as tools on `reg`. Returns the count of tools
     registered (useful for the startup log line).
@@ -94,7 +94,7 @@ async def register(reg: Any, cfg: Config) -> int:
     # URL-based ones so a freshly-tagged real endpoint wins over a
     # stale checked-in YAML.
     for url in cfg.openapi_urls:
-        spec = await fetch_spec(url)
+        spec = fetch_spec(url)
         if spec is None:
             continue
         base_url = _server_url_from_spec(spec, fallback=url)

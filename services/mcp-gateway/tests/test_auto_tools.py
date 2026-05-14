@@ -62,7 +62,7 @@ def _spec_with_get_order() -> dict:
 async def test_no_urls_registers_nothing() -> None:
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=())
-    count = await auto_tools.register(reg, cfg)
+    count = auto_tools.register(reg, cfg)
     assert count == 0
     assert reg.list_tools() == []
 
@@ -80,7 +80,7 @@ async def test_unreachable_backend_is_swallowed() -> None:
 
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://dead.test/openapi.json", "https://alive.test/openapi.json"))
-    count = await auto_tools.register(reg, cfg)
+    count = auto_tools.register(reg, cfg)
     assert count == 1
     assert reg.list_tools()[0]["name"] == "getOrder"
 
@@ -96,7 +96,7 @@ async def test_registered_tool_has_openapi_derived_schema() -> None:
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
 
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
 
     tools = reg.list_tools()
     assert len(tools) == 1
@@ -120,7 +120,7 @@ async def test_description_combines_summary_and_description() -> None:
     )
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
     desc = reg.list_tools()[0]["description"]
     assert "Look up an order" in desc
     assert "Returns full order detail" in desc
@@ -141,7 +141,7 @@ async def test_tool_substitutes_path_params_and_forwards_query() -> None:
 
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
 
     result = await reg.call("getOrder", {"order_id": "ord_42", "include_items": True})
     assert route.called
@@ -161,7 +161,7 @@ async def test_tool_missing_path_param_returns_structured_error() -> None:
     )
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
 
     result = await reg.call("getOrder", {})
     assert result["error"] == "missing_argument"
@@ -181,7 +181,7 @@ async def test_tool_backend_unreachable_returns_structured_error() -> None:
 
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
 
     result = await reg.call("getOrder", {"order_id": "ord_42"})
     assert result["error"] == "backend_unreachable"
@@ -205,7 +205,7 @@ async def test_tool_forwards_static_backend_headers() -> None:
         openapi_urls=("https://api.fake.test/openapi.json",),
         openapi_backend_headers={"X-Storefront-Key": "shh", "X-Service": "mcp"},
     )
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
     await reg.call("getOrder", {"order_id": "ord_42"})
 
     assert route.called
@@ -228,7 +228,7 @@ async def test_tool_does_not_send_headers_when_none_configured() -> None:
 
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
     await reg.call("getOrder", {"order_id": "ord_42"})
 
     assert route.called
@@ -250,7 +250,7 @@ async def test_tool_backend_4xx_returns_lookup_failed() -> None:
 
     reg = ToolRegistry()
     cfg = _FakeCfg(openapi_urls=("https://api.fake.test/openapi.json",))
-    await auto_tools.register(reg, cfg)
+    auto_tools.register(reg, cfg)
 
     result = await reg.call("getOrder", {"order_id": "missing"})
     assert result["error"] == "lookup_failed"
