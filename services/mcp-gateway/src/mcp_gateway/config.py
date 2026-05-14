@@ -38,6 +38,14 @@ class Config:
     # slm-router's MONGO_URI.
     mongo_url: str | None
     mongo_db: str
+    # OpenAPI spec URLs the gateway pulls at startup. Every operation
+    # in those specs tagged `x-mcp-expose: customer-read` is auto-
+    # registered as an MCP tool (see openapi_loader + auto_tools). This
+    # is the path to broad customer-data coverage without hand-coding a
+    # tool per endpoint. CSV via `MCP_OPENAPI_URLS`. Empty list = the
+    # gateway only serves hand-rolled tools (current default while
+    # backends are still being annotated).
+    openapi_urls: tuple[str, ...]
     # Per-tenant backend URLs. The MCP tools use these to call into
     # the product's own services (e.g. fanzone-user for points,
     # mark8ly orders for order lookups). Defaults match the in-cluster
@@ -71,6 +79,7 @@ def load() -> Config:
         embedder_url=(os.environ.get("EMBEDDER_URL") or "").rstrip("/") or None,
         mongo_url=os.environ.get("MONGO_URL") or None,
         mongo_db=os.environ.get("MONGO_DB", "otto"),
+        openapi_urls=_split_csv(os.environ.get("MCP_OPENAPI_URLS", "")),
         fanzone_user_url=os.environ.get(
             "FANZONE_USER_URL",
             "http://fanzone-user.fanzone.svc.cluster.local",
@@ -108,3 +117,9 @@ def load() -> Config:
             "http://scrapper-api.scrapper.svc.cluster.local",
         ).rstrip("/"),
     )
+
+
+def _split_csv(raw: str) -> tuple[str, ...]:
+    """Parse a CSV env var, dropping empties and whitespace. Returns a
+    tuple so the Config remains hashable (it's a frozen dataclass)."""
+    return tuple(part.strip() for part in raw.split(",") if part.strip())

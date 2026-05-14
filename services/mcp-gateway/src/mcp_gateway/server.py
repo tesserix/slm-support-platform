@@ -32,7 +32,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from .config import Config, load
-from . import shared_tools, tenants
+from . import auto_tools, shared_tools, tenants
 
 logger = logging.getLogger(__name__)
 
@@ -230,6 +230,17 @@ def build_registry(cfg: Config) -> ToolRegistry:
     # against it unchanged.
     shared_tools.register(reg, cfg)
     tenants.register(reg, cfg)
+    # Auto-registered tools come LAST so a freshly-tagged OpenAPI op
+    # can't accidentally shadow a hand-rolled tool with intentional
+    # logic (e.g. a write tool that wraps a GET with confirmation).
+    # `auto_tools.register` is async because it has to fetch specs over
+    # HTTP — we run it on a private loop here so build_registry stays
+    # synchronous for the existing call sites.
+    auto_count = asyncio.run(auto_tools.register(reg, cfg))
+    if auto_count:
+        logger.info(
+            "auto-registered %d openapi tool(s) for tenant=%s", auto_count, cfg.tenant
+        )
     return reg
 
 
@@ -267,4 +278,3 @@ app = build_app()
 
 
 _ = re  # keep import for future schema generation
-_ = asyncio
