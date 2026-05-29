@@ -1,0 +1,124 @@
+<mxfile host="65bd71144e">
+    <diagram name="From LLM to Production AI" id="stages">
+        <mxGraphModel dx="847" dy="2044" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1500" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="28" value="" style="group" vertex="1" connectable="0" parent="1">
+                    <mxGeometry x="125" y="-1079" width="1043" height="1449" as="geometry"/>
+                </mxCell>
+                <mxCell id="2" value="© 2026 Tesserix · Authored by Samyak Rout · blog.tesserix.app · All rights reserved" style="text;html=1;align=left;verticalAlign=middle;fontSize=12;fontStyle=1;fontColor=#424242;fontFamily=Helvetica;" parent="28" vertex="1">
+                    <mxGeometry x="63" y="61" width="980" height="24" as="geometry"/>
+                </mxCell>
+                <mxCell id="3" value="" style="group" parent="28" connectable="0" vertex="1">
+                    <mxGeometry width="600" height="1449" as="geometry"/>
+                </mxCell>
+                <mxCell id="4" value="From LLM &amp;rarr; Production AI Platform" style="text;html=1;strokeColor=#0D47A1;fillColor=#1976D2;fontColor=#FFFFFF;fontSize=22;fontStyle=1;align=center;verticalAlign=middle;rounded=1;strokeWidth=2;glass=0;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry width="600" height="50" as="geometry"/>
+                </mxCell>
+                <mxCell id="5" value="How a chatbot turns into a real product &amp;mdash; one small upgrade at a time" style="text;html=1;strokeColor=none;fillColor=none;fontColor=#424242;fontSize=12;fontStyle=2;align=center;" parent="3" vertex="1">
+                    <mxGeometry y="81" width="600" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="6" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#129504;&amp;nbsp; 1. LLM&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;A really smart talker. It only writes words &amp;mdash; that&amp;apos;s it.&lt;br&gt;It can&amp;apos;t check anything new, can&amp;apos;t do anything for you, and forgets you the moment the chat ends.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#5D4037&quot;&gt;&amp;#129520; Tools: GPT-4o, Claude Sonnet, Llama 3, Gemini, Qwen, Mistral, DeepSeek&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF59D;strokeColor=#FBC02D;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="109" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="7" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128218;&amp;nbsp; 2. + Indexer&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Take all your company&amp;apos;s documents and sort them so the AI can find the right page fast.&lt;br&gt;Users don&amp;apos;t see this step &amp;mdash; it&amp;apos;s quiet prep work. But without it, nothing below works.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#5D4037&quot;&gt;&amp;#129520; Tools: Pinecone, Weaviate, Qdrant, pgvector, Chroma + embed: OpenAI, BGE, Cohere, Voyage&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFE0B2;strokeColor=#FB8C00;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="259" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="8" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128270;&amp;nbsp; 3. + RAG (reads your docs before answering)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Before replying, the AI quickly opens the right pages from YOUR documents.&lt;br&gt;So it stops making stuff up and answers from your own data. Smarter now, but still only talks.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#1B5E20&quot;&gt;&amp;#129520; Tools: LangChain, LlamaIndex, Haystack + rerankers: Cohere Rerank, BGE-Reranker, Jina&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C8E6C9;strokeColor=#43A047;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="409" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="9" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128295;&amp;nbsp; 4. + Tools (it can DO things now)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Now the AI can actually act, not just talk &amp;mdash; look up an order, send an email, do a calculation, update records.&lt;br&gt;It goes from a talking statue to an assistant with hands.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#0D47A1&quot;&gt;&amp;#129520; Tools: MCP, OpenAI Function Calling, LangChain Tools, Zapier AI, Make, Composio&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#BBDEFB;strokeColor=#1E88E5;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="559" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="10" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128190;&amp;nbsp; 5. + Memory&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Now it remembers you &amp;mdash; what you asked last time, what you like, what didn&amp;apos;t work.&lt;br&gt;Next visit it picks up where you left off. Like a colleague who knows you, not a stranger every time.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#4A148C&quot;&gt;&amp;#129520; Tools: Mem0, Zep, Letta (MemGPT), LangMem, Redis, Mongo, Postgres&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E1BEE7;strokeColor=#8E24AA;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="709" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="11" value="&lt;font style=&quot;font-size:18px;font-weight:bold&quot;&gt;&amp;#129302;&amp;nbsp; 6. = AI Agent&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:12px;font-weight:bold&quot;&gt;Talker + Reads your docs + Hands + Memory = AGENT&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Give it a goal and it figures out the steps on its own &amp;mdash; tries, learns, tries again until the job is done.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#BF360C&quot;&gt;&amp;#129520; Tools: LangGraph, OpenAI Assistants, Claude Agent SDK, Vercel AI SDK, Pydantic AI&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFCCBC;strokeColor=#D84315;strokeWidth=3;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;dashed=1;dashPattern=8 4;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="859" width="600" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="12" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#129302;&amp;rarr;&amp;#129302;&amp;rarr;&amp;#129302;&amp;nbsp; 7. + Agentic AI (a team of agents)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;One agent now hires other agents. One plans, one researches, one double-checks, one does the action.&lt;br&gt;Like a small office team running itself &amp;mdash; each member is good at one thing.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#BF360C&quot;&gt;&amp;#129520; Tools: CrewAI, AutoGen, LangGraph multi-agent, OpenAI Swarm, Magentic-One&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFAB91;strokeColor=#E64A19;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="1029" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="13" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128678;&amp;nbsp; 8. + Gateway (a traffic-cop in front)&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;You don&amp;apos;t have one AI any more, you have several. A traffic-cop picks the right one for the job.&lt;br&gt;Small cheap AI for easy questions, big expensive AI only when really needed. Cheaper, faster.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#880E4F&quot;&gt;&amp;#129520; Tools: LiteLLM, Portkey, OpenRouter, Kong AI Gateway, Cloudflare AI Gateway&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F8BBD0;strokeColor=#D81B60;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="1179" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="14" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#9889;&amp;nbsp; 9. + Cache &amp;amp; Limits&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;If two people ask the same question, answer the second one from memory instead of doing the work twice.&lt;br&gt;Also stop any one customer from hogging the system. Small effort here, huge savings on the bill.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#01579B&quot;&gt;&amp;#129520; Tools: Redis, GPTCache, Helicone, Portkey, LangCache, Anyscale&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B3E5FC;strokeColor=#0288D1;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="1329" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="15" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128737;&amp;nbsp; 10. + Safety &amp;amp; Rules&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Hide people&amp;apos;s private info before it ever reaches the AI. Block sneaky inputs trying to trick the AI.&lt;br&gt;Keep a record of who asked what. The difference between a cool demo and something a bank can actually use.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#004D40&quot;&gt;&amp;#129520; Tools: Llama Guard, NeMo Guardrails, Guardrails AI, Lakera, Presidio (PII), Prompt Guard&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#B2DFDB;strokeColor=#00695C;strokeWidth=2;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="1479" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="16" value="&lt;font style=&quot;font-size:16px;font-weight:bold&quot;&gt;&amp;#128202;&amp;nbsp; 11. + Watching everything &amp;mdash; &lt;u&gt;Ready for real users&lt;/u&gt;&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:11px&quot;&gt;Watch every question, every answer, every slow moment, every wrong reply.&lt;br&gt;When something breaks at 3 a.m. you actually know what broke and why. Now it&amp;apos;s a real product, not a science project.&lt;/font&gt;&lt;br&gt;&lt;font style=&quot;font-size:10px;font-style:italic;color:#1B5E20&quot;&gt;&amp;#129520; Tools: Langfuse, LangSmith, Helicone, Arize Phoenix, Datadog LLM, OpenTelemetry, Grafana&lt;/font&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#C5E1A5;strokeColor=#33691E;strokeWidth=3;align=left;verticalAlign=middle;spacingLeft=20;spacingRight=20;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry y="1629" width="600" height="130" as="geometry"/>
+                </mxCell>
+                <mxCell id="17" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="6" target="7" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="18" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="7" target="8" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="19" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="8" target="9" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="20" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="9" target="10" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="21" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#D84315;strokeWidth=2.5;" parent="3" source="10" target="11" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="22" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="11" target="12" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="23" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="12" target="13" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="24" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="13" target="14" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="25" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#757575;strokeWidth=2;" parent="3" source="14" target="15" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="26" style="endArrow=classicThin;endFill=1;html=1;rounded=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#33691E;strokeWidth=2.5;" parent="3" source="15" target="16" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="27" value="Each step adds one small upgrade. Skip a step and you have a toy. Do all of them and you have a real product people pay for." style="text;html=1;strokeColor=none;fillColor=none;fontColor=#616161;fontSize=10;fontStyle=2;align=center;" parent="3" vertex="1">
+                    <mxGeometry y="1779" width="600" height="20" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe1" value="smart, but&lt;br&gt;can&amp;apos;t do laundry" style="text;html=1;align=center;verticalAlign=middle;fillColor=#FFFDE7;strokeColor=#FBC02D;strokeWidth=1;fontSize=9;fontStyle=2;fontColor=#5D4037;rounded=1;rotation=-4;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="610" y="125" width="100" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe4" value="uh oh, it has&lt;br&gt;API keys now" style="text;html=1;align=center;verticalAlign=middle;fillColor=#E3F2FD;strokeColor=#1976D2;strokeWidth=1;fontSize=9;fontStyle=2;fontColor=#0D47A1;rounded=1;rotation=5;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="610" y="575" width="100" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe5" value="stalker mode&lt;br&gt;(in a good way)" style="text;html=1;align=center;verticalAlign=middle;fillColor=#F3E5F5;strokeColor=#8E24AA;strokeWidth=1;fontSize=9;fontStyle=2;fontColor=#4A148C;rounded=1;rotation=-3;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="610" y="725" width="100" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe6" value="you just&lt;br&gt;shipped Jarvis" style="text;html=1;align=center;verticalAlign=middle;fillColor=#FFEBEE;strokeColor=#D84315;strokeWidth=2;fontSize=10;fontStyle=1;fontColor=#B71C1C;rounded=1;rotation=6;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="610" y="880" width="110" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe7" value="your AI hired&lt;br&gt;more AIs" style="text;html=1;align=center;verticalAlign=middle;fillColor=#FFF3E0;strokeColor=#E64A19;strokeWidth=1;fontSize=9;fontStyle=2;fontColor=#BF360C;rounded=1;rotation=-5;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="610" y="1050" width="100" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe10" value="compliance team&lt;br&gt;finally happy" style="text;html=1;align=center;verticalAlign=middle;fillColor=#E0F2F1;strokeColor=#00695C;strokeWidth=1;fontSize=9;fontStyle=2;fontColor=#004D40;rounded=1;rotation=4;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="610" y="1495" width="105" height="35" as="geometry"/>
+                </mxCell>
+                <mxCell id="vibe11" value="you are&lt;br&gt;here &amp;rarr;" style="text;html=1;align=center;verticalAlign=middle;fillColor=#FFEBEE;strokeColor=#D32F2F;strokeWidth=2;fontSize=10;fontStyle=1;fontColor=#B71C1C;rounded=1;rotation=-6;shadow=1;" parent="3" vertex="1">
+                    <mxGeometry x="-95" y="1655" width="80" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="sparkle1" value="&amp;#10024;" style="text;html=1;align=center;fontSize=24;fontColor=#FBC02D;" parent="3" vertex="1">
+                    <mxGeometry x="-50" y="115" width="30" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="sparkle2" value="&amp;#11088;" style="text;html=1;align=center;fontSize=20;fontColor=#FBC02D;" parent="3" vertex="1">
+                    <mxGeometry x="-40" y="430" width="30" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="sparkle3" value="&amp;#10024;" style="text;html=1;align=center;fontSize=22;fontColor=#E91E63;" parent="3" vertex="1">
+                    <mxGeometry x="-50" y="900" width="30" height="30" as="geometry"/>
+                </mxCell>
+                <mxCell id="sparkle4" value="&amp;#11088;" style="text;html=1;align=center;fontSize=18;fontColor=#33691E;" parent="3" vertex="1">
+                    <mxGeometry x="-45" y="1340" width="30" height="30" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>
