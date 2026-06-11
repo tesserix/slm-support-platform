@@ -46,16 +46,18 @@ type Config struct {
 	// Next.js proxy and do not).
 	CORSAllowedOrigins string `envconfig:"CORS_ALLOWED_ORIGINS" default:""`
 
-	// Outbound email for anonymous OTP verification. When SendgridAPIKey is
-	// empty the service falls back to a stdout log mailer — useful for dev
-	// and for keeping the service bootable before the provider secret has
-	// been provisioned.
-	SendgridAPIKey string `envconfig:"SENDGRID_API_KEY" default:""`
-	OTPFromEmail   string `envconfig:"OTP_FROM_EMAIL" default:"noreply@mark8ly.com"`
-	OTPFromName    string `envconfig:"OTP_FROM_NAME" default:"Otto Support"`
-	OTPCodeTTL     int    `envconfig:"OTP_CODE_TTL_SECONDS" default:"600"`
-	OTPMaxAttempts int    `envconfig:"OTP_MAX_ATTEMPTS" default:"5"`
-	OTPResendCooldown int `envconfig:"OTP_RESEND_COOLDOWN_SECONDS" default:"45"`
+	// Outbound email for anonymous OTP verification. SendGrid is the
+	// primary provider; Resend is the always-on fallback when both keys
+	// are set. When both are empty the service falls back to a stdout log
+	// mailer — useful for dev and for keeping the service bootable before
+	// the provider secrets have been provisioned.
+	SendgridAPIKey    string `envconfig:"SENDGRID_API_KEY" default:""`
+	ResendAPIKey      string `envconfig:"RESEND_API_KEY" default:""`
+	OTPFromEmail      string `envconfig:"OTP_FROM_EMAIL" default:"noreply@mark8ly.com"`
+	OTPFromName       string `envconfig:"OTP_FROM_NAME" default:"Otto Support"`
+	OTPCodeTTL        int    `envconfig:"OTP_CODE_TTL_SECONDS" default:"600"`
+	OTPMaxAttempts    int    `envconfig:"OTP_MAX_ATTEMPTS" default:"5"`
+	OTPResendCooldown int    `envconfig:"OTP_RESEND_COOLDOWN_SECONDS" default:"45"`
 }
 
 // Load reads .env (best-effort) then populates a Config from env vars.
