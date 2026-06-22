@@ -275,14 +275,35 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 
 	reply := choice.Message.Content
 	confidence := scoreConfidence(reply, choice.FinishReason)
-	if d := evaluator.CheckPostInference(confidence, toolFailures); d.Escalate {
-		log.Info("post-check escalation", "reason", d.Reason, "confidence", confidence, "tool_failures", toolFailures)
+
+	// Count the customer's turns (prior history + this message) so the
+	// policy can give the bot a few exchanges before handing a
+	// low-confidence conversation to a human.
+	customerTurns := 1
+	for _, h := range history {
+		if h.SenderType == "customer" {
+			customerTurns++
+		}
+	}
+
+	d := evaluator.CheckPostInference(confidence, toolFailures, customerTurns)
+	if d.Escalate {
+		log.Info("post-check escalation", "reason", d.Reason, "confidence", confidence, "tool_failures", toolFailures, "customer_turns", customerTurns)
 		return o.escalate(ctx, ev, string(d.Reason))
 	}
 
 	if reply == "" {
 		log.Warn("empty model reply, escalating")
 		return o.escalate(ctx, ev, "empty_reply")
+	}
+
+	// Low confidence but still inside the try-first window: keep helping,
+	// and append a soft offer so the customer knows a human/vendor
+	// handoff is one ask away (saying "talk to a human" forces it via
+	// the pre-check on their next message).
+	if d.OfferHandoff {
+		reply += "\n\n" + handoffOfferText
+		log.Info("offering soft handoff", "confidence", confidence, "customer_turns", customerTurns)
 	}
 
 	if err := o.deps.Otto.PostAssistantMessage(ctx, otto.AssistantMessage{
@@ -295,9 +316,15 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 	}); err != nil {
 		return fmt.Errorf("post assistant message: %w", err)
 	}
-	log.Info("assistant reply posted", "confidence", confidence, "len", len(reply))
+	log.Info("assistant reply posted", "confidence", confidence, "len", len(reply), "offered_handoff", d.OfferHandoff)
 	return nil
 }
+
+// handoffOfferText is appended to a low-confidence reply while the bot is
+// still within its try-first window. It tells the customer how to force a
+// human handoff ("talk to a human" is a humanRequestPhrase the pre-check
+// matches on the next turn).
+const handoffOfferText = "If this didn't fully resolve your question, I can connect you to the vendor or a human agent — just reply \"talk to a human\" and I'll hand you over."
 
 func (o *Orchestrator) escalate(ctx context.Context, ev watcher.CustomerMessage, reason string) error {
 	if err := o.deps.Otto.MarkNeedsHuman(ctx, ev.ConversationID, reason); err != nil {

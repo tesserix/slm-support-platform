@@ -187,6 +187,13 @@ type EscalationPolicy struct {
 	Keywords []string `yaml:"keywords"`
 	// Tool call failures over this count in one turn escalate.
 	MaxToolFailures int `yaml:"max_tool_failures"`
+	// MinTurns is how many customer messages must be exchanged before a
+	// low-confidence answer escalates to a human. Below this count the
+	// bot keeps trying and only *offers* a handoff (the customer can
+	// still force one with an explicit "talk to a human", and hard
+	// keywords like "refund"/"lawyer" always escalate immediately). 0
+	// disables the gate (escalate on the first low-confidence turn).
+	MinTurns int `yaml:"min_turns"`
 }
 
 func loadRoutes(path string) (Routes, error) {

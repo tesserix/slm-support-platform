@@ -32,7 +32,14 @@ const (
 // Decision summarises whether to escalate and why.
 type Decision struct {
 	Escalate bool
-	Reason   Reason
+	// OfferHandoff is set when the answer was low-confidence but we're
+	// still inside the "let the bot try first" window (customer turn
+	// count below MinTurns). The orchestrator should NOT mark the
+	// conversation for a human; instead it appends a soft offer so the
+	// customer knows they can ask for one. Mutually exclusive with
+	// Escalate.
+	OfferHandoff bool
+	Reason       Reason
 	// Matched is populated for keyword matches (the actual word seen)
 	// and for low-confidence (the score), to help humans triaging the
 	// inbox understand the AI's reasoning.
@@ -77,9 +84,26 @@ func (e *Evaluator) PreCheckCustomerMessage(text string) Decision {
 
 // CheckPostInference evaluates the model's output after generation.
 // confidence is the orchestrator's heuristic score (0–1); toolFailures
-// is the count of failed tool calls in this turn.
-func (e *Evaluator) CheckPostInference(confidence float64, toolFailures int) Decision {
+// is the count of failed tool calls in this turn; customerTurns is how
+// many messages the customer has sent in this conversation including the
+// current one.
+//
+// Low confidence does NOT immediately escalate when MinTurns is set and
+// the customer hasn't reached that many turns yet — we give the bot a
+// few exchanges to actually resolve the query and only surface a soft
+// handoff offer. Tool-failure escalations are not gated (a broken tool
+// won't fix itself by waiting). Hard keyword / explicit-human
+// escalations are handled earlier in PreCheckCustomerMessage and are
+// likewise never gated.
+func (e *Evaluator) CheckPostInference(confidence float64, toolFailures int, customerTurns int) Decision {
 	if e.cfg.ConfidenceThreshold > 0 && confidence < e.cfg.ConfidenceThreshold {
+		if e.cfg.MinTurns > 0 && customerTurns < e.cfg.MinTurns {
+			return Decision{
+				OfferHandoff: true,
+				Reason:       ReasonLowConfidence,
+				Matched:      formatConfidence(confidence),
+			}
+		}
 		return Decision{
 			Escalate: true,
 			Reason:   ReasonLowConfidence,
