@@ -120,8 +120,9 @@ def load() -> Config:
             "MARK8LY_ORDERS_URL",
             # marketplace-api moved to the mark8ly namespace + per-mode
             # services; the storefront engine serves /api/v1/storefront/*
-            # (the old mp-orders.marketplace host no longer resolves).
-            "http://mark8ly-marketplace-api-storefront.mark8ly.svc.cluster.local",
+            # on port 8080 (the old mp-orders.marketplace host no longer
+            # resolves, and the service exposes 8080 not 80).
+            "http://mark8ly-marketplace-api-storefront.mark8ly.svc.cluster.local:8080",
         ).rstrip("/"),
         homechef_api_url=os.environ.get(
             "HOMECHEF_API_URL",
