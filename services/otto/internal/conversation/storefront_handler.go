@@ -114,6 +114,9 @@ func (h *StorefrontHandler) Register(r *gin.RouterGroup) {
 // never arrive. Ticket auth takes over; see wsTicket above.
 func (h *StorefrontHandler) RegisterWS(r *gin.RouterGroup) {
 	r.GET("/conversations/:id/ws", h.websocket)
+	// SSE alternative to the WebSocket — same ticket auth, same Envelope
+	// frames — for clients/networks where WS upgrades are blocked.
+	r.GET("/conversations/:id/sse", h.sse)
 }
 
 type createRequest struct {

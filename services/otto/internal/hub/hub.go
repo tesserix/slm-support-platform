@@ -40,7 +40,11 @@ type Client struct {
 	mu     sync.Mutex
 }
 
-// Hub is the in-process pub/sub.
+// Hub is the in-process pub/sub fanout. Cross-replica delivery is handled
+// separately by the changestream watcher (every replica tails Mongo and
+// rebroadcasts inserts/updates to its own local clients), so a client
+// connected to any replica receives every message; clients dedupe by id.
+// Supports both WebSocket clients and channel-only clients (SSE).
 type Hub struct {
 	mu      sync.RWMutex
 	rooms   map[string]map[*Client]struct{}
@@ -72,6 +76,26 @@ func (h *Hub) NewClient(conn *websocket.Conn, meta map[string]string) *Client {
 	h.mu.Unlock()
 	return c
 }
+
+// NewChannelClient registers a non-WebSocket client (an SSE stream). The
+// caller drains Channel() and writes frames to its transport, then calls
+// Disconnect when the peer goes away. conn is nil for these clients, so the
+// WS read/write pumps are not used.
+func (h *Hub) NewChannelClient(meta map[string]string) *Client {
+	c := &Client{
+		send:  make(chan []byte, 64),
+		rooms: make(map[string]struct{}),
+		meta:  meta,
+	}
+	h.mu.Lock()
+	h.clients[c] = struct{}{}
+	h.mu.Unlock()
+	return c
+}
+
+// Channel exposes the client's outbound buffer so a non-WebSocket transport
+// (SSE) can stream frames. Disconnect closes it, ending the stream loop.
+func (c *Client) Channel() <-chan []byte { return c.send }
 
 // Subscribe adds a client to a room.
 func (h *Hub) Subscribe(c *Client, room string) {
@@ -112,8 +136,8 @@ func (h *Hub) Broadcast(room string, env Envelope) {
 		select {
 		case c.send <- buf:
 		default:
-			// Slow consumer — drop them. Client.Run will clean up on the
-			// next read failure.
+			// Slow consumer — drop them. Client.Run / the SSE stream loop
+			// will clean up on the next read failure.
 			go h.Disconnect(c)
 		}
 	}
@@ -145,7 +169,10 @@ func (h *Hub) Disconnect(c *Client) {
 	delete(h.clients, c)
 	h.mu.Unlock()
 
-	_ = c.conn.Close()
+	// SSE clients have no WebSocket connection.
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
 	close(c.send)
 }
 
