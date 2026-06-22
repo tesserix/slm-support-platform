@@ -199,7 +199,10 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
     )
     async def get_order(order_id: str, store_slug: str = "tesserix-store") -> dict[str, Any]:
         path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}"
-        return await _get_json(cfg.mark8ly_orders_url, path, source="mp-orders")
+        return await _get_json(
+            cfg.mark8ly_orders_url, path, source="mp-orders",
+            headers=cfg.openapi_backend_headers or None,
+        )
 
     @mcp.tool(
         name="list_returns",
@@ -214,6 +217,7 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             cfg.mark8ly_orders_url, path,
             source="mp-orders",
             params={"limit": max(1, min(limit, 25))},
+            headers=cfg.openapi_backend_headers or None,
         )
 
     @mcp.tool(
@@ -247,6 +251,7 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             f"/api/v1/storefront/stores/{store_slug}/orders",
             source="mp-orders",
             params={"customer_email": email, "since_days": clamped, "limit": 50},
+            headers=cfg.openapi_backend_headers or None,
         )
 
     @mcp.tool(
