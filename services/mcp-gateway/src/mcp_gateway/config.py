@@ -18,6 +18,10 @@ SUPPORTED_TENANTS: frozenset[str] = frozenset(
         "gameverse",
         "horoscope",
         "scrapper",
+        # tesserix-home (the company marketing/admin app) routes its Otto
+        # chats to the "platform" tenant — the MCP for it serves company
+        # info + contact-lead capture rather than per-store order data.
+        "platform",
     }
 )
 
@@ -73,6 +77,10 @@ class Config:
     gameverse_server_url: str
     horoscope_api_url: str
     scrapper_api_url: str
+    # tesserix-home (the "company" app, deployed as the `company` service in
+    # the `tesserix` namespace). Used by the platform-tenant tools for the
+    # public contact-lead endpoint.
+    tesserix_home_url: str
 
 
 def load() -> Config:
@@ -131,6 +139,10 @@ def load() -> Config:
         scrapper_api_url=os.environ.get(
             "SCRAPPER_API_URL",
             "http://scrapper-api.scrapper.svc.cluster.local",
+        ).rstrip("/"),
+        tesserix_home_url=os.environ.get(
+            "TESSERIX_HOME_URL",
+            "http://company.tesserix.svc.cluster.local",
         ).rstrip("/"),
     )
 

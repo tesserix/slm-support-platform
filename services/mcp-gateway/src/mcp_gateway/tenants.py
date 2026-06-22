@@ -30,6 +30,7 @@ def register(mcp, cfg: Config) -> None:
         "gameverse": _register_gameverse,
         "horoscope": _register_horoscope,
         "scrapper": _register_scrapper,
+        "platform": _register_platform,
     }[cfg.tenant](mcp, cfg)
 
 
@@ -73,6 +74,44 @@ async def _get_json(
         }
     except httpx.HTTPError as exc:
         logger.warning("backend GET %s failed: %s", url, exc)
+        return {"error": "backend_unreachable", "detail": str(exc), "source": source}
+
+
+async def _post(
+    base_url: str,
+    path: str,
+    *,
+    source: str,
+    json_body: dict[str, Any] | None = None,
+    form: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """POST {base_url}{path} with a JSON or form body; return the parsed
+    JSON (annotated with `source`) or a structured error. Never raises.
+
+    Used by the *request*-creating tools (e.g. create_refund_request).
+    These tools NEVER mutate money — they file a request (a return in
+    'requested' state / an order issue) that a human owner or admin must
+    approve before any refund is issued.
+    """
+    url = f"{base_url}{path}"
+    try:
+        async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
+            res = await client.post(url, json=json_body, data=form, headers=headers)
+        if 200 <= res.status_code < 300:
+            try:
+                body = res.json()
+            except ValueError:
+                body = {"raw": res.text[:500]}
+            return {**(body if isinstance(body, dict) else {"data": body}), "source": source}
+        return {
+            "error": "request_failed",
+            "status": res.status_code,
+            "detail": res.text[:300] if res.text else None,
+            "source": source,
+        }
+    except httpx.HTTPError as exc:
+        logger.warning("backend POST %s failed: %s", url, exc)
         return {"error": "backend_unreachable", "detail": str(exc), "source": source}
 
 
@@ -209,6 +248,60 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             source="mp-orders",
             params={"customer_email": email, "since_days": clamped, "limit": 50},
         )
+
+    @mcp.tool(
+        name="create_refund_request",
+        description=(
+            "File a return/refund REQUEST for an order. This does NOT issue a "
+            "refund — it creates a return in 'requested' state that the store "
+            "owner/admin must review and approve before any money moves. Use it "
+            "only after you've looked up the order (get_order) and confirmed the "
+            "items. Put your investigation summary (eligibility, what the "
+            "customer reported, recommendation) in `findings`; it is saved on the "
+            "request for the approver. items is a list of "
+            "{order_item_id, quantity} for the lines to return."
+        ),
+    )
+    async def create_refund_request(
+        order_id: str,
+        items: list[dict[str, Any]],
+        reason: str,
+        findings: str = "",
+        store_slug: str = "tesserix-store",
+        type: str = "return",
+        currency_code: str = "INR",
+    ) -> dict[str, Any]:
+        if not items:
+            return {
+                "error": "items_required",
+                "_action_for_assistant": (
+                    "Call get_order first, then pass the order_item_id + quantity "
+                    "for each line the customer wants to return. Never guess ids."
+                ),
+            }
+        body = {
+            "type": type if type in ("return", "replace") else "return",
+            "reason": reason,
+            "notes": findings,
+            "items": items,
+            "currency_code": currency_code,
+        }
+        result = await _post(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}/returns",
+            source="mp-orders",
+            json_body=body,
+            headers=cfg.openapi_backend_headers or None,
+        )
+        # Make the human-approval gate explicit to the assistant + customer.
+        if "error" not in result:
+            result["_status"] = "pending_owner_approval"
+            result["_action_for_assistant"] = (
+                "Tell the customer their refund/return REQUEST has been filed and "
+                "is awaiting the store owner's approval — no refund is issued until "
+                "they approve. Share the return id/number if present."
+            )
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -364,6 +457,37 @@ def _register_homechef(mcp, cfg: Config) -> None:
             source="homechef-api",
             params={"since_days": clamped, "limit": 50},
         )
+
+    @mcp.tool(
+        name="create_refund_request",
+        description=(
+            "File a refund/issue REQUEST for a HomeChef order. This does NOT "
+            "issue a refund — it raises an order issue that the chef/admin must "
+            "review and resolve before any money is returned. Use after looking "
+            "up the order (get_order_status). Put your investigation summary "
+            "(what went wrong, eligibility, recommendation) in `findings`."
+        ),
+    )
+    async def create_refund_request(
+        order_id: str,
+        reason: str,
+        findings: str = "",
+    ) -> dict[str, Any]:
+        # ReportIssue is a multipart form: reason, description, affectedItemIds[].
+        result = await _post(
+            cfg.homechef_api_url,
+            f"/orders/{order_id}/issues",
+            source="homechef-api",
+            form={"reason": reason, "description": findings or reason},
+        )
+        if "error" not in result:
+            result["_status"] = "pending_admin_approval"
+            result["_action_for_assistant"] = (
+                "Tell the customer their refund request has been raised as an "
+                "order issue and is awaiting review — no refund is issued until "
+                "the chef/admin approves it."
+            )
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -602,6 +726,73 @@ def _register_scrapper(mcp, cfg: Config) -> None:
             "/api/accounts",
             source="scrapper-api",
         )
+
+
+# ---------------------------------------------------------------------------
+# platform — tesserix-home (the "company" marketing/admin app)
+#
+# tesserix-home has no per-store order data, so this tenant's tools cover
+# what the company site can actually answer for a visitor: product/FAQ
+# lookups (via the shared knowledge base) and capturing a sales/contact
+# lead. The contact endpoint is public (no auth), so the AI can file a
+# lead without any customer session.
+# ---------------------------------------------------------------------------
+def _register_platform(mcp, cfg: Config) -> None:
+    @mcp.tool(
+        name="submit_contact_lead",
+        description=(
+            "Capture a sales/contact lead from a tesserix.app visitor when they "
+            "ask to be contacted, request a demo, or want pricing follow-up. "
+            "Pass their name, email and the message/intent. Returns a "
+            "confirmation. Use only with details the visitor actually gave — "
+            "never invent contact info."
+        ),
+    )
+    async def submit_contact_lead(
+        name: str,
+        email: str,
+        message: str,
+        company: str = "",
+    ) -> dict[str, Any]:
+        body = {"name": name, "email": email, "message": message, "company": company}
+        result = await _post(
+            cfg.tesserix_home_url,
+            "/api/contact",
+            source="tesserix-home",
+            json_body=body,
+        )
+        if "error" not in result:
+            result["_action_for_assistant"] = (
+                "Confirm to the visitor that the team will reach out to the email "
+                "they gave. Do not promise a specific time."
+            )
+        return result
+
+    @mcp.tool(
+        name="get_platform_overview",
+        description=(
+            "High-level facts about the Tesserix platform + Mark8ly for answering "
+            "'what is this / what can it do / how do I start' questions. Static, "
+            "non-personal company info — safe to share with any visitor."
+        ),
+    )
+    async def get_platform_overview() -> dict[str, Any]:
+        return {
+            "source": "tesserix-home",
+            "company": "Tesserix",
+            "summary": (
+                "Tesserix builds commerce infrastructure. Mark8ly is its "
+                "multi-tenant marketplace platform — merchants launch a branded "
+                "storefront + admin in days."
+            ),
+            "products": ["Mark8ly (marketplace)", "HomeChef / fe3dr (food delivery)"],
+            "get_started": "https://tesserix.app — use the contact form for a demo.",
+            "_action_for_assistant": (
+                "Answer company/marketing questions from these facts. For anything "
+                "specific (pricing details, a demo), offer submit_contact_lead. Use "
+                "search_knowledge_base for FAQ/policy detail when available."
+            ),
+        }
 
 
 __all__ = ["register"]
