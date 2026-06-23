@@ -33,6 +33,54 @@ type ServerRef struct {
 	AuthEnvVar string
 }
 
+// Canonical trusted-context header names. The mcp-gateway reads these
+// EXACT names to attribute a tool call to the originating conversation
+// and customer (traceability + ticket creation). Values originate
+// server-side in slm-router (Mongo change-stream event + conversation
+// document) — never from the model or the customer — so the gateway may
+// trust them PROVIDED the shared auth header (ServerRef.AuthHeader) is
+// present and valid on the same request.
+const (
+	HeaderConversationID = "X-Otto-Conversation-Id"
+	HeaderTenantID       = "X-Tenant-Id"
+	HeaderStoreID        = "X-Store-Id"
+	HeaderCustomerID     = "X-Customer-Id"
+	HeaderCustomerEmail  = "X-Customer-Email"
+	HeaderCustomerName   = "X-Customer-Name"
+	HeaderCaseID         = "X-Otto-Case-Id"
+)
+
+// CallContext is the trusted conversation/customer identity forwarded on
+// every MCP request as HTTP headers. Passed by value; zero value is
+// valid (the startup pre-warm tools/list sends no context headers).
+// Empty fields are omitted so the gateway can tell "unknown" from "".
+type CallContext struct {
+	ConversationID string
+	TenantID       string
+	StoreID        string
+	CustomerID     string // internal product user id (firebase uid / Keycloak sub / UUID)
+	CustomerEmail  string
+	CustomerName   string
+	CaseID         string // Otto support case id when one exists; else ""
+}
+
+// applyTrustedHeaders writes the canonical context headers onto req,
+// omitting empty fields.
+func applyTrustedHeaders(req *http.Request, cc CallContext) {
+	setIf := func(name, val string) {
+		if val != "" {
+			req.Header.Set(name, val)
+		}
+	}
+	setIf(HeaderConversationID, cc.ConversationID)
+	setIf(HeaderTenantID, cc.TenantID)
+	setIf(HeaderStoreID, cc.StoreID)
+	setIf(HeaderCustomerID, cc.CustomerID)
+	setIf(HeaderCustomerEmail, cc.CustomerEmail)
+	setIf(HeaderCustomerName, cc.CustomerName)
+	setIf(HeaderCaseID, cc.CaseID)
+}
+
 // Tool is one entry returned by tools/list.
 type Tool struct {
 	Name        string         `json:"name"`
@@ -42,8 +90,8 @@ type Tool struct {
 
 // Client is the orchestrator-facing surface.
 type Client interface {
-	ListTools(ctx context.Context, server ServerRef) ([]Tool, error)
-	Call(ctx context.Context, server ServerRef, toolName string, arguments map[string]any) (CallResult, error)
+	ListTools(ctx context.Context, server ServerRef, cc CallContext) ([]Tool, error)
+	Call(ctx context.Context, server ServerRef, cc CallContext, toolName string, arguments map[string]any) (CallResult, error)
 }
 
 // CallResult is the tool-execution result. Content is the natural
@@ -101,8 +149,8 @@ func (e *rpcError) Error() string {
 }
 
 // ListTools calls "tools/list".
-func (c *HTTPClient) ListTools(ctx context.Context, server ServerRef) ([]Tool, error) {
-	resp, err := c.do(ctx, server, "tools/list", nil)
+func (c *HTTPClient) ListTools(ctx context.Context, server ServerRef, cc CallContext) ([]Tool, error) {
+	resp, err := c.do(ctx, server, cc, "tools/list", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -116,12 +164,12 @@ func (c *HTTPClient) ListTools(ctx context.Context, server ServerRef) ([]Tool, e
 }
 
 // Call invokes "tools/call".
-func (c *HTTPClient) Call(ctx context.Context, server ServerRef, toolName string, arguments map[string]any) (CallResult, error) {
+func (c *HTTPClient) Call(ctx context.Context, server ServerRef, cc CallContext, toolName string, arguments map[string]any) (CallResult, error) {
 	params := map[string]any{
 		"name":      toolName,
 		"arguments": arguments,
 	}
-	resp, err := c.do(ctx, server, "tools/call", params)
+	resp, err := c.do(ctx, server, cc, "tools/call", params)
 	if err != nil {
 		return CallResult{}, err
 	}
@@ -132,7 +180,7 @@ func (c *HTTPClient) Call(ctx context.Context, server ServerRef, toolName string
 	return out, nil
 }
 
-func (c *HTTPClient) do(ctx context.Context, server ServerRef, method string, params map[string]any) (json.RawMessage, error) {
+func (c *HTTPClient) do(ctx context.Context, server ServerRef, cc CallContext, method string, params map[string]any) (json.RawMessage, error) {
 	id := fmt.Sprintf("%s-%d", method, c.now().UnixNano())
 	rpc := rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params}
 	body, err := json.Marshal(rpc)
@@ -148,6 +196,10 @@ func (c *HTTPClient) do(ctx context.Context, server ServerRef, method string, pa
 	if server.AuthHeader != "" && server.AuthEnvVar != "" {
 		req.Header.Set(server.AuthHeader, os.Getenv(server.AuthEnvVar))
 	}
+	// Trusted conversation/customer context for traceability + ticket
+	// creation. Set AFTER the shared-secret auth header; never derived
+	// from model/customer input.
+	applyTrustedHeaders(req, cc)
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("MCP request to %s: %w", server.Name, err)
