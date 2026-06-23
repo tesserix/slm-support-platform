@@ -327,18 +327,24 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 const handoffOfferText = "If this didn't fully resolve your question, I can connect you to the vendor or a human agent — just reply \"talk to a human\" and I'll hand you over."
 
 func (o *Orchestrator) escalate(ctx context.Context, ev watcher.CustomerMessage, reason string) error {
-	if err := o.deps.Otto.MarkNeedsHuman(ctx, ev.ConversationID, reason); err != nil {
-		return fmt.Errorf("mark needs_human: %w", err)
-	}
-	// Soft hand-off message so the customer isn't left in silence.
+	// Post the soft hand-off message FIRST. PostAssistantMessage flips the
+	// conversation to `active`, so MarkNeedsHuman must run AFTER it —
+	// otherwise the message-post would overwrite the pending/queued status
+	// and the customer would see "Agent connected" with no real agent.
 	_ = o.deps.Otto.PostAssistantMessage(ctx, otto.AssistantMessage{
 		ConversationID: ev.ConversationID,
 		TenantID:       ev.TenantID,
 		StoreID:        ev.StoreID,
-		Body:           "I'm connecting you to a human agent who can help with this. They'll be with you shortly.",
+		Body:           "I'm connecting you to a human agent who can help with this. You're in the queue — they'll be with you shortly.",
 		SenderID:       "slm-router",
 		SenderName:     "Otto",
 	})
+	// Reset to pending + needs_human (drops any assignee) so it re-enters
+	// the staff queue: the widget shows the waiting overlay, the admin
+	// inbox surfaces it under Pending, and a human accept flips it active.
+	if err := o.deps.Otto.MarkNeedsHuman(ctx, ev.ConversationID, reason); err != nil {
+		return fmt.Errorf("mark needs_human: %w", err)
+	}
 	// Optional per-tenant escalation hook — POSTs the conversation
 	// context to the product's own ticket service so a durable
 	// ticket lands in the merchant's dashboard immediately. Failure

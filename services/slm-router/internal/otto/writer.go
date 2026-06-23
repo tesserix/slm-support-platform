@@ -185,11 +185,20 @@ func (w *MongoWriter) RecentMessages(ctx context.Context, conversationID string,
 func (w *MongoWriter) MarkNeedsHuman(ctx context.Context, conversationID, reason string) error {
 	now := time.Now().UTC()
 	filter := bson.M{"_id": conversationID}
+	// Put the conversation back into `pending` and drop any assignee so it
+	// re-enters the staff queue: the customer widget then shows the
+	// "waiting for an agent" overlay (not "Agent connected"), the staff
+	// admin inbox surfaces it under Pending, and QueuePosition counts it
+	// (pending + needs_human). A human accepting it flips it back to
+	// active. Without resetting status the AI's prior reply left it
+	// `active`, which falsely read as a connected agent.
 	update := bson.M{
 		"$set": bson.M{
 			"needs_human": true,
+			"status":      "pending",
 			"updated_at":  now,
 		},
+		"$unset": bson.M{"assignee": ""},
 	}
 	res, err := w.db.Collection("conversations").UpdateOne(ctx, filter, update)
 	if err != nil {
