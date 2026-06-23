@@ -20,6 +20,20 @@ from .config import Config
 logger = logging.getLogger(__name__)
 
 
+def _trusted_ctx() -> dict[str, str]:
+    """Trusted conversation/customer context for the current MCP request,
+    forwarded by slm-router as validated HTTP headers (see server.py
+    request_ctx). Tools use this — NOT model-supplied args — for the
+    conversation/tenant/store/customer identity, so ticket + refund
+    requests are attributable and can't be spoofed via tool arguments.
+    Lazy import of server avoids the server->tenants import cycle."""
+    try:
+        from .server import request_ctx
+        return request_ctx.get() or {}
+    except Exception:
+        return {}
+
+
 def register(mcp, cfg: Config) -> None:
     """Dispatch to the tenant-specific register function."""
     {
@@ -284,12 +298,21 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
                     "for each line the customer wants to return. Never guess ids."
                 ),
             }
+        # Stamp the trusted conversation id (traceability): the request is
+        # correlated to the Otto conversation it came from. Taken from the
+        # verified request context, never from the model.
+        ctx = _trusted_ctx()
+        conv = ctx.get("conversation_id", "")
+        notes = findings
+        if conv:
+            notes = (findings + f"\n\n[otto_conversation: {conv}]").strip()
         body = {
             "type": type if type in ("return", "replace") else "return",
             "reason": reason,
-            "notes": findings,
+            "notes": notes,
             "items": items,
             "currency_code": currency_code,
+            "conversation_id": conv,  # ignored by the handler if unknown; aids traceability
         }
         result = await _post(
             cfg.mark8ly_orders_url,
@@ -301,10 +324,73 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
         # Make the human-approval gate explicit to the assistant + customer.
         if "error" not in result:
             result["_status"] = "pending_owner_approval"
+            result["conversation_id"] = conv
             result["_action_for_assistant"] = (
                 "Tell the customer their refund/return REQUEST has been filed and "
                 "is awaiting the store owner's approval — no refund is issued until "
                 "they approve. Share the return id/number if present."
+            )
+        return result
+
+    @mcp.tool(
+        name="create_support_ticket",
+        description=(
+            "Open a TRACKED support ticket for THIS conversation when the issue "
+            "needs human follow-up or a durable record (you can't fully resolve it "
+            "in chat, or it should leave a paper trail). This does NOT resolve the "
+            "issue. The conversation, customer and store are taken from the verified "
+            "conversation context automatically — you only supply a short subject "
+            "and a summary of the issue plus your findings. Returns the ticket "
+            "reference; calling it again for the same conversation returns the same "
+            "ticket (idempotent)."
+        ),
+    )
+    async def create_support_ticket(
+        subject: str,
+        summary: str,
+        escalation_reason: str = "",
+    ) -> dict[str, Any]:
+        ctx = _trusted_ctx()
+        missing = [k for k in ("conversation_id", "tenant_id", "store_id", "customer_email") if not ctx.get(k)]
+        if missing:
+            return {
+                "error": "missing_context",
+                "missing": missing,
+                "_action_for_assistant": (
+                    "Couldn't open a ticket — required context is missing"
+                    + (" (need the customer's email — ask for it)" if missing == ["customer_email"] else "")
+                    + ". Apologise and offer to connect them to a human instead."
+                ),
+            }
+        if not cfg.marketplace_internal_auth:
+            return _not_implemented(
+                "create_support_ticket",
+                "ticket backend auth (MARKETPLACE_INTERNAL_AUTH) is not configured for this gateway.",
+            )
+        body = {
+            "conversation_id": ctx["conversation_id"],
+            "tenant_id": ctx["tenant_id"],
+            "store_id": ctx["store_id"],
+            "customer_email": ctx["customer_email"],
+            "customer_name": ctx.get("customer_name", ""),
+            "subject": subject,
+            "description": summary,
+            "escalation_reason": escalation_reason,
+        }
+        result = await _post(
+            cfg.mark8ly_marketplace_api_admin_url,
+            "/internal/v1/tickets/from-conversation",
+            source="mp-tickets",
+            json_body=body,
+            headers={"X-Internal-Auth": cfg.marketplace_internal_auth},
+        )
+        if "error" not in result:
+            result["_status"] = "ticket_created"
+            result["conversation_id"] = ctx["conversation_id"]
+            result["_action_for_assistant"] = (
+                "Tell the customer a support ticket has been opened for their issue "
+                "(share the ticket id/number if present) and that the team will "
+                "follow up. Do not promise a specific resolution or time."
             )
         return result
 

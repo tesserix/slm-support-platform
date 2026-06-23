@@ -195,10 +195,24 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 	if err != nil {
 		log.Warn("customer load failed, prompt will lack identity", "err", err.Error())
 	}
+	// Trusted context forwarded on every MCP request so the gateway can
+	// attribute tool actions to this exact conversation/customer (for
+	// traceability + ticket creation). Sourced server-side from the
+	// change-stream event + the conversation doc — never from the model.
+	// CaseID is "" until the watched message carries one.
+	mcpCtx := mcp.CallContext{
+		ConversationID: ev.ConversationID,
+		TenantID:       ev.TenantID,
+		StoreID:        ev.StoreID,
+		CustomerID:     customer.UserID,
+		CustomerEmail:  customer.Email,
+		CustomerName:   customer.Name,
+		CaseID:         "",
+	}
 	msgs := PromptBuilder{}.Build(systemPrompt, customer, topChunks, history, ev.Body)
 
 	// 5. Discover tools for this tenant.
-	tools, toolMap, err := o.resolveTools(ctx, ev.TenantID, product.MCPServers)
+	tools, toolMap, err := o.resolveTools(ctx, ev.TenantID, mcpCtx, product.MCPServers)
 	if err != nil {
 		log.Warn("tool discovery failed, proceeding without tools", "err", err.Error())
 	}
@@ -241,7 +255,7 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
 				args = map[string]any{}
 			}
-			result, err := o.deps.MCP.Call(ctx, server, tc.Function.Name, args)
+			result, err := o.deps.MCP.Call(ctx, server, mcpCtx, tc.Function.Name, args)
 			if err != nil || result.IsError {
 				toolFailures++
 				msgs = append(msgs, inference.Message{
@@ -479,7 +493,7 @@ func renderTranscript(history []otto.HistoryMessage, lastCustomerMsg string) str
 	return b.String()
 }
 
-func (o *Orchestrator) resolveTools(ctx context.Context, tenantID string, servers []config.MCPServerConfig) ([]inference.Tool, map[string]mcp.ServerRef, error) {
+func (o *Orchestrator) resolveTools(ctx context.Context, tenantID string, cc mcp.CallContext, servers []config.MCPServerConfig) ([]inference.Tool, map[string]mcp.ServerRef, error) {
 	o.mu.RLock()
 	entry, ok := o.toolCache[tenantID]
 	o.mu.RUnlock()
@@ -491,7 +505,7 @@ func (o *Orchestrator) resolveTools(ctx context.Context, tenantID string, server
 	serverMap := map[string]mcp.ServerRef{}
 	for _, s := range servers {
 		ref := mcp.ServerRef{Name: s.Name, URL: s.URL, AuthHeader: s.AuthHeader, AuthEnvVar: s.AuthEnvVar}
-		discovered, err := o.deps.MCP.ListTools(ctx, ref)
+		discovered, err := o.deps.MCP.ListTools(ctx, ref, cc)
 		if err != nil {
 			return nil, nil, fmt.Errorf("list tools on %s: %w", s.Name, err)
 		}

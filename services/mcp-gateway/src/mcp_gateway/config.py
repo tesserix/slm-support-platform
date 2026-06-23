@@ -81,6 +81,13 @@ class Config:
     # the `tesserix` namespace). Used by the platform-tenant tools for the
     # public contact-lead endpoint.
     tesserix_home_url: str
+    # marketplace-api ADMIN engine — the /internal/v1/tickets/from-conversation
+    # route lives on the admin engine (not storefront). create_support_ticket
+    # POSTs here.
+    mark8ly_marketplace_api_admin_url: str
+    # Shared secret for marketplace-api /internal routes (X-Internal-Auth).
+    # None => create_support_ticket returns internal_auth_unconfigured.
+    marketplace_internal_auth: str | None
 
 
 def load() -> Config:
@@ -148,6 +155,11 @@ def load() -> Config:
             "TESSERIX_HOME_URL",
             "http://company.tesserix.svc.cluster.local",
         ).rstrip("/"),
+        mark8ly_marketplace_api_admin_url=os.environ.get(
+            "MARK8LY_MARKETPLACE_API_ADMIN_URL",
+            "http://mark8ly-marketplace-api-admin.mark8ly.svc.cluster.local:8080",
+        ).rstrip("/"),
+        marketplace_internal_auth=os.environ.get("MARKETPLACE_INTERNAL_AUTH") or None,
     )
 
 

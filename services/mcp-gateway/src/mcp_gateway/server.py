@@ -18,6 +18,7 @@ same registry so behaviour stays consistent.
 """
 from __future__ import annotations
 
+import contextvars
 import inspect
 import json
 import logging
@@ -34,6 +35,27 @@ from .config import Config, load
 from . import auto_tools, shared_tools, tenants
 
 logger = logging.getLogger(__name__)
+
+# Trusted conversation/customer context, forwarded by slm-router as HTTP
+# headers on every MCP request (set ONLY after the X-MCP-Key shared secret
+# is validated by BearerAuthMiddleware — so these are trustworthy). Tools
+# read them via tenants._trusted_ctx() to attribute actions (ticket /
+# refund-request creation) to the originating conversation. The header
+# names MUST match slm-router's mcp.Header* consts.
+_TRUSTED_HEADERS: dict[str, str] = {
+    "X-Otto-Conversation-Id": "conversation_id",
+    "X-Tenant-Id": "tenant_id",
+    "X-Store-Id": "store_id",
+    "X-Customer-Id": "customer_id",
+    "X-Customer-Email": "customer_email",
+    "X-Customer-Name": "customer_name",
+    "X-Otto-Case-Id": "case_id",
+}
+
+# Per-request trusted context. Default empty; set per JSON-RPC request.
+request_ctx: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
+    "mcp_request_ctx", default={}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +187,15 @@ async def _jsonrpc_handler(request: Request) -> Response:
     rpc_id = body.get("id")
     method = body.get("method")
     params = body.get("params") or {}
+
+    # Capture the trusted conversation/customer context for this request.
+    # Safe to trust: BearerAuthMiddleware already validated X-MCP-Key before
+    # this handler ran. Only non-empty headers are kept (absent == unknown).
+    # Header-supplied identity is authoritative over anything in tool args.
+    request_ctx.set(
+        {field: request.headers[h] for h, field in _TRUSTED_HEADERS.items() if request.headers.get(h)}
+    )
+
     registry: ToolRegistry = request.app.state.registry
 
     try:
