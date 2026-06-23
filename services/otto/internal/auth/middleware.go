@@ -56,6 +56,26 @@ func StaffAuth(internalSecret string) gin.HandlerFunc {
 	}
 }
 
+// PlatformAuth gates the platform super-admin endpoints (cross-tenant
+// analytics) that aggregate across every tenant. Only a caller holding the
+// internal shared secret — i.e. the tesserix-home admin proxy — may pass.
+// Unlike StaffAuth there is NO tenant/store scope, and unlike the other
+// gates the secret is mandatory: an empty secret denies (a cross-tenant
+// surface must never fall open to the permissive-empty path).
+func PlatformAuth(internalSecret string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if internalSecret == "" || !constantTimeEqual(c.GetHeader("X-Internal-Auth"), internalSecret) {
+			respondUnauthorized(c)
+			return
+		}
+		// Carry the platform admin's id for audit/logging when present.
+		if uid := c.GetHeader("X-User-Id"); uid != "" {
+			c.Set(CtxUserID, uid)
+		}
+		c.Next()
+	}
+}
+
 // StoreResolver locks the staff caller to a specific store. The admin proxy
 // selects the store per request (there's no cross-store inbox in v1) and
 // forwards it as X-Store-Id. If it's missing the request is rejected.

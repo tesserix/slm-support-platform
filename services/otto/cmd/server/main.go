@@ -130,6 +130,14 @@ func main() {
 	})
 	adminHandler.Register(admin)
 
+	// Platform super-admin (cross-tenant) analytics — internal-auth ONLY,
+	// no store scope. tesserix-home's admin proxies this for the
+	// /admin/analytics/support view; PlatformAuth denies on an empty secret
+	// so this cross-tenant surface never falls open.
+	platform := r.Group("/api/v1/platform/otto")
+	platform.Use(auth.PlatformAuth(cfg.InternalAuthSecret))
+	adminHandler.RegisterPlatform(platform)
+
 	// Inactivity sweeper — closes active conversations the customer
 	// has gone quiet on for 15 min. One goroutine per process; no
 	// leader election needed at v1 volume, the CloseForInactivity

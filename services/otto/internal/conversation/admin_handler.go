@@ -138,6 +138,25 @@ func (h *AdminHandler) listAuditRecent(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"events": events})
 }
 
+// RegisterPlatform mounts cross-tenant platform super-admin endpoints. The
+// caller must apply auth.PlatformAuth to the group (internal-auth, NO store
+// scope) — these aggregate across every tenant otto serves.
+func (h *AdminHandler) RegisterPlatform(r *gin.RouterGroup) {
+	r.GET("/stats", h.platformStats)
+}
+
+// platformStats returns a cross-tenant rollup of support conversations for
+// the platform analytics view (tesserix-home → /admin/analytics/support).
+func (h *AdminHandler) platformStats(c *gin.Context) {
+	stats, err := h.d.Conversations.PlatformStats(c.Request.Context())
+	if err != nil {
+		h.d.Logger.Error("otto: platform stats failed", "err", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "stats_failed"})
+		return
+	}
+	c.JSON(http.StatusOK, stats)
+}
+
 // RegisterWS mounts the actual WebSocket endpoints. Unlike Register this
 // group must NOT run StaffAuth — ticket auth is used instead.
 func (h *AdminHandler) RegisterWS(r *gin.RouterGroup) {
