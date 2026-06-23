@@ -6,6 +6,8 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+
 	"github.com/tesserix/slm-support-platform/services/otto/internal/auth"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/changestream"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/config"
@@ -16,9 +18,14 @@ import (
 	"github.com/tesserix/slm-support-platform/services/otto/internal/mailer"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/message"
 	ottomongo "github.com/tesserix/slm-support-platform/services/otto/internal/mongo"
+	"github.com/tesserix/slm-support-platform/services/otto/internal/observability"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/otp"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/session"
 )
+
+// serviceName is the OpenTelemetry service.name attribute and the label
+// used by otelgin to tag inbound HTTP spans.
+const serviceName = "support-platform-otto"
 
 func main() {
 	cfg, err := config.Load()
@@ -26,6 +33,22 @@ func main() {
 		panic(err)
 	}
 	log := logger.New(cfg.Env)
+
+	// ── OpenTelemetry (traces + metrics) ───────────────────────────────
+	// No-op when OTEL_EXPORTER_OTLP_ENDPOINT is empty. Init early so the
+	// global providers are installed before any instrumented startup work.
+	otelShutdown, err := observability.Init(context.Background(), serviceName)
+	if err != nil {
+		log.Warn("otel: init failed — continuing without telemetry", "err", err)
+	} else {
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if err := otelShutdown(shutdownCtx); err != nil {
+				log.Warn("otel: shutdown", "err", err)
+			}
+		}()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -93,6 +116,8 @@ func main() {
 
 	// ── HTTP server ────────────────────────────────────────────────────
 	r := httpserver.New(cfg.Env, log, cfg.CORSAllowedOrigins)
+	// Trace inbound HTTP requests. No-op spans when OTel is disabled.
+	r.Use(otelgin.Middleware(serviceName))
 
 	// Storefront REST routes — all run the CustomerContext middleware so
 	// the Next.js proxy's tenant/store/internal-auth headers gate entry.
