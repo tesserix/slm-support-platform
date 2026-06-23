@@ -31,11 +31,16 @@ type Server struct {
 }
 
 // New constructs the HTTP server. Call SetReady(true) once dependencies
-// are confirmed up.
-func New(port int, logger *slog.Logger) *Server {
+// are confirmed up. Any middlewares passed are installed before routes
+// are registered (so request-scoped middleware like OTel tracing wraps
+// every handler) — main wires OTel's gin middleware in this way.
+func New(port int, logger *slog.Logger, middlewares ...gin.HandlerFunc) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	e := gin.New()
 	e.Use(gin.Recovery())
+	for _, m := range middlewares {
+		e.Use(m)
+	}
 
 	s := &Server{engine: e, port: port, logger: logger}
 

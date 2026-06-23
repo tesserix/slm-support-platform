@@ -13,8 +13,10 @@ import (
 	"time"
 
 	_ "github.com/lib/pq"
+	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/mongo"
 	mongoopts "go.mongodb.org/mongo-driver/mongo/options"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/config"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/embed"
@@ -22,12 +24,17 @@ import (
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/inference"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/logger"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/mcp"
+	"github.com/tesserix/slm-support-platform/services/slm-router/internal/observability"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/orchestrator"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/otto"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/rerank"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/retriever"
 	"github.com/tesserix/slm-support-platform/services/slm-router/internal/watcher"
 )
+
+// serviceName is the OpenTelemetry service.name for this binary; it also
+// names the gin tracing middleware's spans.
+const serviceName = "slm-router"
 
 func main() {
 	cfg, err := config.Load()
@@ -42,6 +49,20 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	// --- OpenTelemetry (traces + metrics over OTLP/gRPC) ---
+	// No-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset (local/dev).
+	otelShutdown, err := observability.Init(ctx, serviceName)
+	if err != nil {
+		log.Fatalf("otel init: %v", err)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := otelShutdown(shutdownCtx); err != nil {
+			lg.Error("otel shutdown", "err", err.Error())
+		}
+	}()
 
 	// --- Mongo client (for Otto watcher + Otto writer) ---
 	mongoClient, err := mongo.Connect(ctx, mongoopts.Client().ApplyURI(cfg.Env.MongoURI))
@@ -101,7 +122,7 @@ func main() {
 	go w.Start(ctx, events)
 	go orch.Run(ctx, events)
 
-	srv := httpserver.New(cfg.Env.HTTPPort, lg)
+	srv := httpserver.New(cfg.Env.HTTPPort, lg, gin.HandlerFunc(otelgin.Middleware(serviceName)))
 	srv.SetReady(true)
 	if err := srv.Run(ctx); err != nil {
 		lg.Error("http server exited with error", "err", err.Error())
