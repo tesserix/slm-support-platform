@@ -39,11 +39,38 @@ var allowed = Result{Allowed: true, Category: CategoryNone}
 // safe). Extend as needed — kept here rather than in config so the guard works
 // out of the box.
 var profanityTerms = []string{
+	// English profanity + slurs
 	"fuck", "fucker", "fucking", "motherfucker", "shit", "bullshit", "bitch",
-	"bastard", "asshole", "dickhead", "cunt", "slut", "whore", "prick", "wanker",
-	"twat", "bollocks", "douchebag", "jackass", "dumbass", "retard", "retarded",
-	"nigger", "nigga", "faggot", "fag", "chink", "paki", "coon",
-	"kike", "wetback", "tranny", "gook", "raghead",
+	"bastard", "asshole", "arsehole", "dickhead", "cunt", "slut", "whore",
+	"prick", "wanker", "twat", "bollocks", "douchebag", "jackass", "dumbass",
+	"retard", "retarded", "nigger", "nigga", "faggot", "fag", "chink", "paki",
+	"coon", "kike", "wetback", "tranny", "gook", "raghead", "spic", "dyke",
+	// Hindi / Urdu (romanised — the common chat input for our India base)
+	"randi", "randii", "raand", "randwa", "chutiya", "chutia", "chutiye",
+	"chutiyapa", "madarchod", "madarchood", "maderchod", "behenchod",
+	"bhenchod", "behnchod", "bhosdi", "bhosdike", "bhosadi", "bhosda",
+	"gaandu", "gandu", "gaand", "harami", "haramzada", "haramkhor", "kamina",
+	"kaminey", "kutiya", "chinaal", "lavda", "lauda", "lodu", "jhaant",
+	"bhadwa", "bhadve", "rakhail", "chutmarike",
+	// Spanish
+	"puta", "puto", "mierda", "pendejo", "cabron", "cabrón", "coño", "gilipollas",
+	"joder", "verga", "chingada", "culero", "maricon", "maricón",
+	// French
+	"putain", "merde", "connard", "connasse", "salope", "encule", "enculé", "pute",
+	// German
+	"scheisse", "scheiße", "arschloch", "hurensohn", "fotze", "wichser",
+	// Portuguese
+	"caralho", "buceta", "viado", "corno",
+	// Italian
+	"cazzo", "stronzo", "vaffanculo", "puttana",
+	// Russian (transliterated)
+	"blyat", "pizdec", "mudak",
+}
+
+// nonLatinTerms are slurs in scripts where ASCII word boundaries don't apply,
+// so they're matched as substrings. Devanagari (Hindi) is the main one for us.
+var nonLatinTerms = []string{
+	"रंडी", "चूतिया", "चुतिया", "मादरचोद", "बहनचोद", "भोसडी", "गांडू", "हरामी", "भड़वा", "कुतिया",
 }
 
 var (
@@ -77,6 +104,11 @@ func Scan(text string) Result {
 	}
 	if profanityRe.MatchString(text) {
 		return Result{Allowed: false, Category: CategoryProfanity, Reason: reasonProfanity}
+	}
+	for _, t := range nonLatinTerms {
+		if strings.Contains(text, t) {
+			return Result{Allowed: false, Category: CategoryProfanity, Reason: reasonProfanity}
+		}
 	}
 	if emailRe.MatchString(text) {
 		return Result{Allowed: false, Category: CategoryPII, Reason: reasonEmail}

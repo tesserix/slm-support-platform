@@ -250,23 +250,28 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="list_recent_orders",
         description=(
-            "List a customer's mark8ly orders placed in the last N days. "
-            "days defaults to 30, MAX 90. If the customer asks for a longer "
-            "window the tool returns range_exceeded — surface that and ask "
-            "them to raise a support ticket. Pass store_slug if known."
+            "Find the customer's orders. mark8ly identifies orders by ORDER "
+            "NUMBER — there is no email-based list, and the content guard blocks "
+            "emails in chat anyway. This tool returns a hint to collect the order "
+            "number; do the actual lookup with get_order."
         ),
     )
-    async def list_recent_orders(email: str, days: int = 30, store_slug: str = "tesserix-store") -> dict[str, Any]:
-        clamped = _check_range(days, max_days=90)
-        if isinstance(clamped, dict):
-            return clamped | {"source": "mp-orders"}
-        return await _get_json(
-            cfg.mark8ly_orders_url,
-            f"/api/v1/storefront/stores/{store_slug}/orders",
-            source="mp-orders",
-            params={"customer_email": email, "since_days": clamped, "limit": 50},
-            headers=cfg.openapi_backend_headers or None,
-        )
+    async def list_recent_orders(email: str = "", days: int = 30, store_slug: str = "tesserix-store") -> dict[str, Any]:
+        # There is no by-email order-list endpoint, and the content guard blocks
+        # customers from sharing email/phone in chat — so order lookups are by
+        # order number via get_order. Return a clear signal instead of calling a
+        # missing endpoint (which 404s). A future verified-context list endpoint
+        # could restore an email-free "all my orders" view.
+        return {
+            "error": "use_order_number",
+            "source": "mp-orders",
+            "_action_for_assistant": (
+                "There's no email-based order list. Ask the customer for their "
+                "order number (it's on their order-confirmation email and the "
+                "Orders page of their account) and call get_order. Never ask for "
+                "or accept their email or phone number in chat."
+            ),
+        }
 
     @mcp.tool(
         name="create_refund_request",
