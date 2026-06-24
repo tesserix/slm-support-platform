@@ -8,7 +8,11 @@ customer "I can't fetch that yet" instead of inventing numbers.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -44,6 +48,44 @@ def _customer_scoped_headers(cfg: Config) -> dict[str, str]:
     email = _trusted_ctx().get("customer_email", "")
     if email:
         headers["X-Customer-Email"] = email
+    return headers
+
+
+def _homechef_signed_headers(
+    cfg: Config, method: str, path: str, body: bytes = b""
+) -> dict[str, str] | None:
+    """Sign a homechef-api request exactly the way HomeChef's BFF does
+    (apps/api/middleware/bff_auth.go `compute`): HMAC-SHA256 over
+    "<method>\\n<path>\\n<hex(sha256(body))>\\n<ts>" with the shared BFF HMAC
+    key (base64), plus the verified customer identity headers. The BFF signs
+    r.URL.Path only — NOT the query string — so `path` must carry no query.
+
+    Returns None (fail closed) when the key or the verified customer id is
+    missing, so the assistant can never make an unauthenticated call or act for
+    an unverified user. The backend scopes every order to X-User-Id, so the
+    assistant only ever sees this customer's orders."""
+    if not cfg.homechef_bff_hmac_key:
+        return None
+    ctx = _trusted_ctx()
+    user_id = ctx.get("customer_id", "")
+    if not user_id:
+        return None
+    try:
+        key = base64.b64decode(cfg.homechef_bff_hmac_key)
+    except Exception:
+        return None
+    ts = str(int(time.time()))
+    body_hash = hashlib.sha256(body).hexdigest()
+    msg = f"{method}\n{path}\n{body_hash}\n{ts}".encode()
+    sig = hmac.new(key, msg, hashlib.sha256).hexdigest()
+    headers = {
+        "X-Internal-Auth": sig,
+        "X-Auth-Ts": ts,
+        "X-User-Id": user_id,
+    }
+    email = ctx.get("customer_email", "")
+    if email:
+        headers["X-User-Email"] = email
     return headers
 
 
@@ -532,10 +574,18 @@ def _register_homechef(mcp, cfg: Config) -> None:
         description="Look up a HomeChef order by id. Status, ETA, chef, items, driver location.",
     )
     async def get_order_status(order_id: str) -> dict[str, Any]:
+        path = f"/api/v1/orders/{order_id}"
+        headers = _homechef_signed_headers(cfg, "GET", path)
+        if headers is None:
+            return {
+                "error": "identity_unverified",
+                "_action_for_assistant": (
+                    "Can't securely verify the customer to look up their order. "
+                    "Ask them to sign in and try again."
+                ),
+            }
         return await _get_json(
-            cfg.homechef_api_url,
-            f"/api/v1/orders/{order_id}",
-            source="homechef-api",
+            cfg.homechef_api_url, path, source="homechef-api", headers=headers,
         )
 
     @mcp.tool(
@@ -554,10 +604,18 @@ def _register_homechef(mcp, cfg: Config) -> None:
         description="Live delivery state for an in-flight order. Coords + ETA + masked driver phone.",
     )
     async def track_delivery(order_id: str) -> dict[str, Any]:
+        path = f"/api/v1/orders/{order_id}/track"
+        headers = _homechef_signed_headers(cfg, "GET", path)
+        if headers is None:
+            return {
+                "error": "identity_unverified",
+                "_action_for_assistant": (
+                    "Can't securely verify the customer to track their order. "
+                    "Ask them to sign in and try again."
+                ),
+            }
         return await _get_json(
-            cfg.homechef_api_url,
-            f"/api/v1/orders/{order_id}/track",
-            source="homechef-api",
+            cfg.homechef_api_url, path, source="homechef-api", headers=headers,
         )
 
     @mcp.tool(
@@ -568,15 +626,25 @@ def _register_homechef(mcp, cfg: Config) -> None:
             "— surface that and ask the customer to raise a support ticket."
         ),
     )
-    async def list_recent_orders(user_id: str, days: int = 14) -> dict[str, Any]:
+    async def list_recent_orders(days: int = 14) -> dict[str, Any]:
+        # The customer is taken from the verified conversation context (never a
+        # model arg); the backend scopes /api/v1/orders to that user.
         clamped = _check_range(days, max_days=30)
         if isinstance(clamped, dict):
             return clamped | {"source": "homechef-api"}
+        path = "/api/v1/orders"
+        headers = _homechef_signed_headers(cfg, "GET", path)
+        if headers is None:
+            return {
+                "error": "identity_unverified",
+                "_action_for_assistant": (
+                    "Can't securely verify the customer to list their orders. "
+                    "Ask them to sign in and try again."
+                ),
+            }
         return await _get_json(
-            cfg.homechef_api_url,
-            f"/api/v1/users/{user_id}/orders",
-            source="homechef-api",
-            params={"since_days": clamped, "limit": 50},
+            cfg.homechef_api_url, path, source="homechef-api",
+            params={"since_days": clamped, "limit": 50}, headers=headers,
         )
 
     @mcp.tool(
