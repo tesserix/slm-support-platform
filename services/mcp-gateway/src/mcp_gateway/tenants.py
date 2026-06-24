@@ -34,6 +34,19 @@ def _trusted_ctx() -> dict[str, str]:
         return {}
 
 
+def _customer_scoped_headers(cfg: Config) -> dict[str, str]:
+    """Storefront backend headers PLUS the verified customer's email, so the
+    backend scopes the order read/write to THIS customer. The email is taken
+    from the trusted conversation context (OTP/session-verified), never from a
+    model argument — so the assistant cannot be used to read or act on another
+    customer's order by passing someone else's order id."""
+    headers = dict(cfg.openapi_backend_headers or {})
+    email = _trusted_ctx().get("customer_email", "")
+    if email:
+        headers["X-Customer-Email"] = email
+    return headers
+
+
 def register(mcp, cfg: Config) -> None:
     """Dispatch to the tenant-specific register function."""
     {
@@ -212,10 +225,22 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
         ),
     )
     async def get_order(order_id: str, store_slug: str = "tesserix-store") -> dict[str, Any]:
+        # Fail closed: without a verified customer email we can't prove the order
+        # belongs to this customer, so refuse rather than risk leaking someone
+        # else's order. The backend ALSO scopes by X-Customer-Email (defence in
+        # depth) — see _customer_scoped_headers.
+        if not _trusted_ctx().get("customer_email"):
+            return {
+                "error": "identity_unverified",
+                "_action_for_assistant": (
+                    "Can't securely verify whose order this is. Ask the customer "
+                    "to sign in (or verify their email) and try again."
+                ),
+            }
         path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}"
         return await _get_json(
             cfg.mark8ly_orders_url, path, source="mp-orders",
-            headers=cfg.openapi_backend_headers or None,
+            headers=_customer_scoped_headers(cfg),
         )
 
     @mcp.tool(
@@ -231,7 +256,7 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             cfg.mark8ly_orders_url, path,
             source="mp-orders",
             params={"limit": max(1, min(limit, 25))},
-            headers=cfg.openapi_backend_headers or None,
+            headers=_customer_scoped_headers(cfg),
         )
 
     @mcp.tool(
@@ -324,7 +349,7 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}/returns",
             source="mp-orders",
             json_body=body,
-            headers=cfg.openapi_backend_headers or None,
+            headers=_customer_scoped_headers(cfg),
         )
         # Make the human-approval gate explicit to the assistant + customer.
         if "error" not in result:
