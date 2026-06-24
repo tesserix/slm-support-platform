@@ -88,6 +88,11 @@ class Config:
     # Shared secret for marketplace-api /internal routes (X-Internal-Auth).
     # None => create_support_ticket returns internal_auth_unconfigured.
     marketplace_internal_auth: str | None
+    # Shared HMAC key (base64) for HomeChef's BFF auth (apps/api bff_auth.go).
+    # The homechef order tools sign requests with it exactly the way the BFF
+    # does, so they can act for a verified customer (scoped server-side to that
+    # customer). None => those tools fail closed.
+    homechef_bff_hmac_key: str | None
 
 
 def load() -> Config:
@@ -160,6 +165,7 @@ def load() -> Config:
             "http://mark8ly-marketplace-api-admin.mark8ly.svc.cluster.local:8080",
         ).rstrip("/"),
         marketplace_internal_auth=os.environ.get("MARKETPLACE_INTERNAL_AUTH") or None,
+        homechef_bff_hmac_key=os.environ.get("HOMECHEF_BFF_HMAC_KEY") or None,
     )
 
 
