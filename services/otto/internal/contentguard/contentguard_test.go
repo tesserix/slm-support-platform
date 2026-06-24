@@ -10,6 +10,10 @@ func TestScanBlocks(t *testing.T) {
 	}{
 		{"profanity", "this is fucking broken", CategoryProfanity},
 		{"slur", "you absolute retard", CategoryProfanity},
+		{"hindi romanised", "Randi", CategoryProfanity},
+		{"hindi sentence", "tu chutiya hai", CategoryProfanity},
+		{"spanish", "eres una puta", CategoryProfanity},
+		{"devanagari", "तुम रंडी हो", CategoryProfanity},
 		{"email", "reach me at john.doe@example.com please", CategoryPII},
 		{"phone spaced", "call me on 0412 345 678", CategoryPII},
 		{"phone plain", "my mobile is 2345678901", CategoryPII},
