@@ -13,6 +13,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 
 	"github.com/tesserix/slm-support-platform/services/otto/internal/auth"
+	"github.com/tesserix/slm-support-platform/services/otto/internal/contentguard"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/event"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/hub"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/message"
@@ -309,6 +310,14 @@ func (h *AdminHandler) postMessage(c *gin.Context) {
 	body.Body = strings.TrimSpace(body.Body)
 	if body.Body == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "empty_message"})
+		return
+	}
+	if g := contentguard.Scan(body.Body); !g.Allowed {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{
+			"error":    "content_blocked",
+			"category": string(g.Category),
+			"message":  g.Reason,
+		})
 		return
 	}
 
