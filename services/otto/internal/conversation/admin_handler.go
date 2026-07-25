@@ -51,6 +51,15 @@ func (h *AdminHandler) emitAudit(c *gin.Context, conv *Conversation, action Audi
 			Email: c.GetString(auth.CtxUserEmail),
 		},
 	}
+	// Platform-surface actions (cross-tenant inbox) are folded into the
+	// tenant's audit trail with a marker so they are distinguishable from
+	// the tenant's own staff actions. StaffAuth leaves CtxSurface empty.
+	if surface := c.GetString(auth.CtxSurface); surface != "" {
+		if meta == nil {
+			meta = map[string]any{}
+		}
+		meta["surface"] = surface
+	}
 	if meta != nil {
 		ev.Meta = bson.M(meta)
 	}

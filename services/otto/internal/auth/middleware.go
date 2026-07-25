@@ -19,7 +19,16 @@ const (
 	CtxUserName     = "user_name"
 	CtxUserRole     = "user_role"
 	CtxSessionToken = "session_token"
+	// CtxSurface marks which auth surface admitted the request. Only the
+	// cross-tenant platform inbox sets it (to "platform"); the tenant-scoped
+	// StaffAuth path leaves it empty. emitAudit folds it into the audit
+	// event's Meta so platform-surface actions are distinguishable in
+	// per-tenant audit trails.
+	CtxSurface = "surface"
 )
+
+// SurfacePlatform is the CtxSurface value set by PlatformStaff.
+const SurfacePlatform = "platform"
 
 // StaffAuth trusts the Next.js admin proxy. The admin middleware already
 // validates the m8_session cookie against auth-bff and forwards identity
@@ -96,6 +105,10 @@ func PlatformStaff(internalSecret string) gin.HandlerFunc {
 			return
 		}
 		c.Set(CtxUserID, userID)
+		// Mark this as a platform-surface request so audit entries written
+		// into the target conversation's tenant trail record that the action
+		// came from the cross-tenant inbox, not the tenant's own staff.
+		c.Set(CtxSurface, SurfacePlatform)
 		if email := c.GetHeader("X-User-Email"); email != "" {
 			c.Set(CtxUserEmail, email)
 		}

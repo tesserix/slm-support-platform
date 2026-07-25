@@ -81,6 +81,52 @@ func TestPlatformStaffSetsIdentityContext(t *testing.T) {
 	}
 }
 
+// PlatformStaff marks the request with the platform surface so emitAudit
+// can distinguish cross-tenant actions in a tenant's audit trail.
+func TestPlatformStaffSetsSurfaceMarker(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	g := r.Group("/p")
+	g.Use(PlatformStaff(testSecret))
+	g.GET("/ok", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"surface": c.GetString(CtxSurface)})
+	})
+	w := doReq(r, map[string]string{
+		"X-Internal-Auth": testSecret,
+		"X-User-Id":       "admin-1",
+	})
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200 (body %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"surface":"platform"`) {
+		t.Fatalf("body %s missing surface=platform", w.Body.String())
+	}
+}
+
+// StaffAuth (tenant-scoped surface) must NOT set the surface marker, so
+// tenant staff actions are not mislabelled as platform actions.
+func TestStaffAuthDoesNotSetSurfaceMarker(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	g := r.Group("/a")
+	g.Use(StaffAuth(testSecret))
+	g.GET("/ok", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"surface": c.GetString(CtxSurface)})
+	})
+	req := httptest.NewRequest(http.MethodGet, "/a/ok", nil)
+	req.Header.Set("X-Internal-Auth", testSecret)
+	req.Header.Set("X-User-Id", "u1")
+	req.Header.Set("X-Tenant-Id", "homechef")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code = %d, want 200 (body %s)", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"surface":""`) {
+		t.Fatalf("body %s should have empty surface", w.Body.String())
+	}
+}
+
 // Regression: PlatformAuth (stats endpoint) also denies on empty secret.
 func TestPlatformAuthDeniesOnEmptyConfiguredSecret(t *testing.T) {
 	gin.SetMode(gin.TestMode)
