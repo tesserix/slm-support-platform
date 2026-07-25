@@ -25,7 +25,7 @@ POST   /api/v1/admin/otto/conversations/:id/close         — staff closes
 GET    /api/v1/admin/otto/ws                              — staff inbox WS (new threads, updates)
 GET    /api/v1/admin/otto/conversations/:id/ws            — staff per-thread WS
 
-GET    /api/v1/platform/otto/stats                        — cross-tenant analytics rollup
+GET    /api/v1/platform/otto/stats                        — cross-tenant analytics rollup (secret-only gate)
 GET    /api/v1/platform/otto/conversations                — platform inbox (all tenants; ?tenant=&status=&assignee=)
 GET    /api/v1/platform/otto/conversations/:id            — platform view
 GET    /api/v1/platform/otto/conversations/:id/messages   — thread history
@@ -49,9 +49,12 @@ provided the caller also presents `X-Internal-Auth` (a shared secret with
 the Next.js proxies).
 
 Platform super-admin routes (tesserix-home) are the deliberate exception:
-gated by the mandatory internal secret PLUS forwarded staff identity
-(X-User-Id), they read across tenants but every write is re-scoped to the
-target conversation's own tenant_id + store_id before it executes.
+they read across tenants, but every write is re-scoped to the target
+conversation's own tenant_id + store_id before it executes. The inbox
+routes require the mandatory internal secret PLUS forwarded staff
+identity (X-User-Id); /stats alone keeps the identity-optional
+secret-only gate, since the analytics proxy does not always have a
+user in hand.
 
 ## Run locally
 
