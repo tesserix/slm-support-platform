@@ -200,6 +200,21 @@ Native Expo screens — no WebView:
   allows; otherwise `pnpm build` + `tsc --noEmit` and manual verification.
 - **mobile:** `tsc --noEmit` + simulator run against prod APIs.
 
+## Post-review follow-ups (from the Phase-1 whole-branch review, 2026-07-25)
+
+- **Before Phase 3 goes live:** platform actions currently write into tenant
+  audit trails as `Actor{Type: "staff"}` with no marker that they came from
+  the cross-tenant surface. Add a surface marker (e.g. `PlatformStaff` sets
+  a context key that `emitAudit` folds into `Actor.Type` or `Meta`).
+- **Phase 2:** dedicated `PLATFORM_INTERNAL_AUTH_SECRET` (fallback to the
+  shared `INTERNAL_AUTH_SECRET` during rollout) so product storefront
+  proxies' shared secret cannot reach the platform surface.
+- **Phase 2 backlog:** platform list pagination (`?limit=` — cross-tenant
+  queue truncates at 50 newest), platform-surface `reopen` (a platform
+  mis-close currently has no platform-side undo), and a deliberate decision
+  on unread-clear semantics (platform `get` clears the tenant staff unread
+  counter).
+
 ## Rollout order
 
 1. Otto backend → deploy (ArgoCD; image via slm-support-platform CI).
