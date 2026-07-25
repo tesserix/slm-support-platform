@@ -18,6 +18,13 @@ type TicketAudience string
 const (
 	TicketAudienceCustomer TicketAudience = "customer"
 	TicketAudienceStaff    TicketAudience = "staff"
+	// TicketAudiencePlatform is minted for the cross-tenant platform
+	// inbox (tesserix-home admins). Platform WS endpoints accept ONLY
+	// this audience, and tenant-scoped admin WS endpoints reject it —
+	// a platform ticket can never be replayed against a store inbox
+	// or vice versa. Inbox-wide platform tickets carry the sentinel
+	// scope tenant="*" store="*"; per-thread ones carry the real scope.
+	TicketAudiencePlatform TicketAudience = "platform"
 )
 
 // Ticket is a short-lived, server-issued ticket the WebSocket handshake
