@@ -200,6 +200,31 @@ Native Expo screens — no WebView:
   allows; otherwise `pnpm build` + `tsc --noEmit` and manual verification.
 - **mobile:** `tsc --noEmit` + simulator run against prod APIs.
 
+## Phase 5 (added 2026-07-25): customer-side chat in the product mobile apps
+
+Users of the product mobile apps (HomeChef `mobile-customer` first; vendor/
+delivery later) get a "Chat with support" screen so they can reach the
+Tesserix admin support team. Requirements from the user:
+- **No floating widget / no screen real estate taken** — a dedicated screen
+  reached from the existing Help/Support section, exactly like mark8ly
+  mobile-admin's "More → Support" pattern.
+- Conversations land in the product's own tenant (`homechef`) and surface
+  in the platform inbox (Phases 1-3) where admins answer them.
+
+Approach (mirrors mark8ly's proven mobile pattern):
+- **Backend:** a small proxy group in the HomeChef Go API
+  (e.g. `/api/v1/support/chat/*` → otto storefront surface) that pins
+  `X-Tenant-Id: homechef` + `X-Store-Id: default`, injects
+  `X-Internal-Auth`, and forwards the authenticated user's identity from
+  the JWT (skips OTP). New env: `OTTO_URL`, `OTTO_INTERNAL_AUTH` on
+  homechef-api (ESO secret already exists for tesserix-home; add a key for
+  homechef). WS passthrough or Istio route for the storefront WS path.
+- **Mobile:** port mark8ly `packages/mobile-shared/support` (client,
+  useSupportChat, SupportChatView, WS→SSE→poll fallback, outbox) into the
+  HomeChef mobile shared package; HomeChef-shape intake reasons.
+- Sequenced after Phase 3 (needs nothing from Phases 2/4, but admins must
+  be able to answer before customers can ask).
+
 ## Post-review follow-ups (from the Phase-1 whole-branch review, 2026-07-25)
 
 - **Before Phase 3 goes live:** platform actions currently write into tenant
