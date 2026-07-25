@@ -159,6 +159,68 @@ func (r *Repository) ListInbox(ctx context.Context, p ListInboxParams) ([]Conver
 	return out, nil
 }
 
+// PlatformListParams filters the cross-tenant platform inbox. Unlike
+// ListInboxParams there is no mandatory scope: an empty TenantID means
+// "every tenant otto serves". Only the platform surface (PlatformStaff
+// gate) may reach this — tenant staff always go through ListInbox.
+type PlatformListParams struct {
+	TenantID       string // empty = all tenants
+	Status         Status // empty = all
+	AssigneeUserID string // empty = any assignee
+	OnlyUnassigned bool
+	Limit          int64
+}
+
+// ListPlatformInbox returns conversations across every tenant for the
+// platform super-admin inbox, newest activity first.
+func (r *Repository) ListPlatformInbox(ctx context.Context, p PlatformListParams) ([]Conversation, error) {
+	filter := bson.M{}
+	if p.TenantID != "" {
+		filter["tenant_id"] = p.TenantID
+	}
+	if p.Status != "" {
+		filter["status"] = p.Status
+	}
+	switch {
+	case p.OnlyUnassigned:
+		filter["assignee"] = bson.M{"$exists": false}
+	case p.AssigneeUserID != "":
+		filter["assignee.user_id"] = p.AssigneeUserID
+	}
+	limit := p.Limit
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "last_message_at", Value: -1}}).
+		SetLimit(limit)
+	cur, err := r.coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	var out []Conversation
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetByIDAnyTenant loads a conversation without tenant scope — platform
+// super-admins address threads by id alone. The caller (platform
+// handler) re-injects the row's real tenant+store before any write so
+// every downstream repo call stays scoped.
+func (r *Repository) GetByIDAnyTenant(ctx context.Context, id string) (*Conversation, error) {
+	var c Conversation
+	if err := r.coll.FindOne(ctx, bson.M{"_id": id}).Decode(&c); err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &c, nil
+}
+
 // Accept assigns a staff member to the conversation and flips status to
 // active. Idempotent-ish: if someone else already accepted, it returns the
 // current state without error — the UI can display who's on it.

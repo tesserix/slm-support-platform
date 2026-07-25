@@ -109,6 +109,16 @@ func (c *Client) EnsureIndexes(ctx context.Context) error {
 			},
 			Options: options.Index().SetName("status_last_customer_msg"),
 		},
+		{
+			// Platform inbox: cross-tenant "waiting/active, newest first"
+			// list — no tenant prefix, so the tenant-scoped indexes can't
+			// serve it. Unfiltered lists are limit-capped (<=200) and rare.
+			Keys: bson.D{
+				{Key: "status", Value: 1},
+				{Key: "last_message_at", Value: -1},
+			},
+			Options: options.Index().SetName("status_last_msg_platform"),
+		},
 	}
 	if _, err := c.Conversations().Indexes().CreateMany(ctx, convIdx); err != nil {
 		return fmt.Errorf("indexes: conversations: %w", err)
