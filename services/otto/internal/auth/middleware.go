@@ -76,6 +76,39 @@ func PlatformAuth(internalSecret string) gin.HandlerFunc {
 	}
 }
 
+// PlatformStaff gates the cross-tenant platform INBOX endpoints
+// (list/accept/reply/close). Two requirements, both mandatory:
+//   1. the internal shared secret — empty configured secret denies,
+//      same rule as PlatformAuth: a cross-tenant surface must never
+//      fall open;
+//   2. a staff identity (X-User-Id) forwarded by the tesserix-home
+//      admin proxy — accept/reply/close must be attributable to a
+//      human, so an anonymous secret-holder is rejected.
+func PlatformStaff(internalSecret string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if internalSecret == "" || !constantTimeEqual(c.GetHeader("X-Internal-Auth"), internalSecret) {
+			respondUnauthorized(c)
+			return
+		}
+		userID := c.GetHeader("X-User-Id")
+		if userID == "" {
+			respondUnauthorized(c)
+			return
+		}
+		c.Set(CtxUserID, userID)
+		if email := c.GetHeader("X-User-Email"); email != "" {
+			c.Set(CtxUserEmail, email)
+		}
+		if name := c.GetHeader("X-User-Name"); name != "" {
+			c.Set(CtxUserName, name)
+		}
+		if role := c.GetHeader("X-User-Role"); role != "" {
+			c.Set(CtxUserRole, role)
+		}
+		c.Next()
+	}
+}
+
 // StoreResolver locks the staff caller to a specific store. The admin proxy
 // selects the store per request (there's no cross-store inbox in v1) and
 // forwards it as X-Store-Id. If it's missing the request is rejected.
