@@ -36,6 +36,9 @@ var ErrNotFound = errors.New("conversation: not found")
 // Repository persists and queries conversations with mandatory tenant+store
 // scoping. No method on this type will ever cross a tenant boundary — every
 // read and write filter includes tenant_id + store_id.
+// The two Platform* / *AnyTenant methods are the deliberate exception:
+// they READ across tenants for the platform super-admin surface; writes
+// remain tenant-scoped without exception.
 type Repository struct {
 	coll *mongo.Collection
 }

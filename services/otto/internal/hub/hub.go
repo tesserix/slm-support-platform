@@ -1,12 +1,14 @@
 // Package hub runs the in-process WebSocket fanout.
 //
 // Each connected client subscribes to one or more rooms. Rooms are keyed
-// strings; the service uses two room families:
+// strings; the service uses three room families:
 //
 //   - conv:<conversation_id>  — everyone in a specific thread (the
 //     customer who owns it + any staff who have opened it).
 //   - inbox:<tenant>:<store>  — the staff inbox, used so staff get a
 //     live toast when a new pending conversation appears.
+//   - inbox-platform            — the cross-tenant platform inbox; every
+//     inbox broadcast is mirrored here for Tesserix platform admins.
 //
 // The hub itself doesn't know anything about tenants or isolation — it just
 // fans messages out to whoever is subscribed. Isolation is enforced at the
