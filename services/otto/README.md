@@ -24,6 +24,18 @@ POST   /api/v1/admin/otto/conversations/:id/messages      — staff reply
 POST   /api/v1/admin/otto/conversations/:id/close         — staff closes
 GET    /api/v1/admin/otto/ws                              — staff inbox WS (new threads, updates)
 GET    /api/v1/admin/otto/conversations/:id/ws            — staff per-thread WS
+
+GET    /api/v1/platform/otto/stats                        — cross-tenant analytics rollup
+GET    /api/v1/platform/otto/conversations                — platform inbox (all tenants; ?tenant=&status=&assignee=)
+GET    /api/v1/platform/otto/conversations/:id            — platform view
+GET    /api/v1/platform/otto/conversations/:id/messages   — thread history
+POST   /api/v1/platform/otto/conversations/:id/accept     — platform staff accepts
+POST   /api/v1/platform/otto/conversations/:id/messages   — platform staff reply
+POST   /api/v1/platform/otto/conversations/:id/close      — platform staff closes
+POST   /api/v1/platform/otto/ws-ticket                    — mint platform inbox WS ticket
+POST   /api/v1/platform/otto/conversations/:id/ws-ticket  — mint platform thread WS ticket
+GET    /api/v1/platform/otto/ws                           — platform inbox WS (every tenant)
+GET    /api/v1/platform/otto/conversations/:id/ws         — platform per-thread WS
 ```
 
 ## Isolation guarantees
@@ -35,6 +47,11 @@ Staff identity arrives via headers the admin proxy forwards after
 validating `m8_session` against auth-bff. The service trusts those headers
 provided the caller also presents `X-Internal-Auth` (a shared secret with
 the Next.js proxies).
+
+Platform super-admin routes (tesserix-home) are the deliberate exception:
+gated by the mandatory internal secret PLUS forwarded staff identity
+(X-User-Id), they read across tenants but every write is re-scoped to the
+target conversation's own tenant_id + store_id before it executes.
 
 ## Run locally
 
