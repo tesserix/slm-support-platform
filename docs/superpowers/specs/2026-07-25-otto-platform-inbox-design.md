@@ -45,9 +45,23 @@ product, in one unified queue.
    admin surface or (C) funnelling every product into one `platform` tenant.
    Rationale: unified queue, zero per-product changes, preserves per-tenant
    isolation that future AI routing (tenant → RAG namespace) depends on.
-2. **The customer-side bubble in tesserix-home admin stays** ("keep both"):
-   admins keep the `OttoSupportChat` widget for raising issues AND gain the
-   new staff inbox.
+2. ~~The customer-side bubble in tesserix-home admin stays ("keep both")~~
+   **REVERSED 2026-07-25 (post-approval, user screenshot feedback):** the
+   `OttoSupportChat` widget (customer-side "start a conversation" bubble) is
+   **removed** from the tesserix-home admin layout. In the admin, otto is
+   staff-side only — admins connect TO customers via the inbox; they do not
+   open chats. The widget remains on tesserix-home's public marketing pages
+   and in every product app.
+3. **Added 2026-07-25 (same feedback): ticket escalation from a chat.**
+   When staff cannot resolve a conversation in chat, they can create a
+   support ticket from the conversation view, pre-filled from the thread
+   (customer identity, product/tenant, intake reason, case id CS-…, and a
+   transcript reference) into tesserix-home's existing platform tickets
+   system (`/api/admin` tickets routes). Phase 3 scope — web admin first;
+   the mobile inbox (Phase 4) gets the same action. The inbox must also
+   surface the product (tenant badge) and the customer's intake problem
+   prominently in the accept flow, so staff understand who/what before
+   they take the chat (already part of the OttoInbox platform mode).
 
 ## 1. Otto backend (`slm-support-platform/services/otto`)
 
@@ -115,8 +129,14 @@ GET  /api/v1/platform/otto/conversations/:id/ws      (per-thread)
   suppression.
 - **New page** `/admin/support/live-chat` mounting `OttoInbox` in platform
   mode, plus a sidebar link alongside the existing support analytics entry.
-- The floating `OttoSupportChat` bubble in the admin layout **stays**; the
+- **Remove** the floating `OttoSupportChat` bubble from the admin layout
+  (decision 2, reversed) — the admin is a staff-side surface only. The
   `/admin/analytics/support` page is untouched.
+- **Ticket escalation** (decision 3): a "Create ticket" action on the
+  conversation view that opens tesserix-home's existing ticket-creation
+  flow pre-filled from the thread (customer, tenant/product label, reason,
+  case id, transcript reference). Exact ticket-schema mapping is settled
+  during Phase 3 planning against the existing `/api/admin` tickets routes.
 
 ## 4. tesserix-home admin mobile (`tesserix-home/apps/mobile`)
 
