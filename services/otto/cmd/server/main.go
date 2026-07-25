@@ -159,9 +159,26 @@ func main() {
 	// no store scope. tesserix-home's admin proxies this for the
 	// /admin/analytics/support view; PlatformAuth denies on an empty secret
 	// so this cross-tenant surface never falls open.
+	//
+	// /stats keeps the identity-less PlatformAuth gate — the analytics
+	// proxy doesn't always have a user in hand. The inbox endpoints
+	// require an attributed staff identity on top (PlatformStaff).
 	platform := r.Group("/api/v1/platform/otto")
 	platform.Use(auth.PlatformAuth(cfg.InternalAuthSecret))
 	adminHandler.RegisterPlatform(platform)
+
+	platformHandler := conversation.NewPlatformHandler(adminHandler, conversation.AdminDeps{
+		Conversations: convRepo,
+		Availability:  availRepo,
+		Audit:         auditRepo,
+		Messages:      msgRepo,
+		Hub:           h,
+		Tickets:       ticketSigner,
+		Logger:        log,
+	})
+	platformInbox := r.Group("/api/v1/platform/otto")
+	platformInbox.Use(auth.PlatformStaff(cfg.InternalAuthSecret))
+	platformHandler.Register(platformInbox)
 
 	// Inactivity sweeper — closes active conversations the customer
 	// has gone quiet on for 15 min. One goroutine per process; no
@@ -198,6 +215,7 @@ func main() {
 	adminWS := r.Group("/api/v1/admin/otto")
 	adminHandler.RegisterWS(adminWS)
 	storefrontHandler.RegisterWS(r.Group("/api/v1/storefront/otto"))
+	platformHandler.RegisterWS(r.Group("/api/v1/platform/otto"))
 
 	if err := httpserver.Run(ctx, cfg.HTTPPort, r, log); err != nil {
 		log.Error("http", "err", err)
