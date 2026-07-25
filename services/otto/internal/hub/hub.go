@@ -143,6 +143,16 @@ func (h *Hub) Broadcast(room string, env Envelope) {
 	}
 }
 
+// BroadcastInbox fans an inbox event out to the tenant's own staff room
+// AND the cross-tenant platform inbox room. Every code path that used
+// to broadcast to RoomInbox directly goes through here so platform
+// admins see the same live updates tenant staff do. env is passed by
+// value, so each Broadcast stamps its own Room field.
+func (h *Hub) BroadcastInbox(tenantID, storeID string, env Envelope) {
+	h.Broadcast(RoomInbox(tenantID, storeID), env)
+	h.Broadcast(RoomPlatformInbox(), env)
+}
+
 // Disconnect removes a client from all rooms and closes the socket.
 func (h *Hub) Disconnect(c *Client) {
 	c.mu.Lock()

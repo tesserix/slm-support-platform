@@ -16,3 +16,12 @@ func RoomConversation(conversationID string) string {
 func RoomInbox(tenantID, storeID string) string {
 	return "inbox:" + tenantID + ":" + storeID
 }
+
+// RoomPlatformInbox is the cross-tenant inbox room for platform
+// super-admins (tesserix-home). Every inbox broadcast is mirrored here
+// by Hub.BroadcastInbox. The "inbox-platform" key deliberately uses a
+// different prefix shape from RoomInbox's "inbox:<tenant>:<store>" so
+// no tenant id (even one named "platform") can collide with it.
+func RoomPlatformInbox() string {
+	return "inbox-platform"
+}

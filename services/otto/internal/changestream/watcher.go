@@ -27,6 +27,7 @@ import (
 // Broadcaster is the subset of *hub.Hub the watcher needs.
 type Broadcaster interface {
 	Broadcast(room string, env hub.Envelope)
+	BroadcastInbox(tenantID, storeID string, env hub.Envelope)
 }
 
 // Watcher streams Mongo change events on `messages` (insert) and
@@ -164,7 +165,7 @@ func (w *Watcher) handleConversation(raw bson.Raw) {
 	}
 	w.Hub.Broadcast(hub.RoomConversation(doc.ID), envelope)
 	if doc.TenantID != "" && doc.StoreID != "" {
-		w.Hub.Broadcast(hub.RoomInbox(doc.TenantID, doc.StoreID), envelope)
+		w.Hub.BroadcastInbox(doc.TenantID, doc.StoreID, envelope)
 	}
 }
 

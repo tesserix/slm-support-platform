@@ -108,7 +108,7 @@ func (s *InactivitySweeper) tick(ctx context.Context, now time.Time, window time
 			Type:    event.TypeConversationClosed,
 			Payload: map[string]any{"conversation": updated},
 		})
-		s.Hub.Broadcast(hub.RoomInbox(updated.TenantID, updated.StoreID), hub.Envelope{
+		s.Hub.BroadcastInbox(updated.TenantID, updated.StoreID, hub.Envelope{
 			Type:    event.TypeConversationClosed,
 			Payload: map[string]any{"conversation": updated},
 		})

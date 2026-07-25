@@ -334,7 +334,7 @@ func (h *StorefrontHandler) create(c *gin.Context) {
 
 	// Notify any staff already watching the inbox that a new pending thread
 	// has arrived. Delivery is best-effort.
-	h.d.Hub.Broadcast(hub.RoomInbox(tenantID, storeID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(tenantID, storeID, hub.Envelope{
 		Type:    event.TypeConversationCreated,
 		Payload: map[string]any{"conversation": conv, "first_message": firstMsg},
 	})
@@ -492,7 +492,7 @@ func (h *StorefrontHandler) postMessage(c *gin.Context) {
 		Type:    event.TypeMessageCreated,
 		Payload: map[string]any{"message": msg},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(conv.TenantID, conv.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(conv.TenantID, conv.StoreID, hub.Envelope{
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation_id": conv.ID, "last_message": msg},
 	})
@@ -576,7 +576,7 @@ func (h *StorefrontHandler) feedback(c *gin.Context) {
 		return
 	}
 	// Let any admin watching see the feedback come in live.
-	h.d.Hub.Broadcast(hub.RoomInbox(conv.TenantID, conv.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(conv.TenantID, conv.StoreID, hub.Envelope{
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
@@ -609,7 +609,7 @@ func (h *StorefrontHandler) close(c *gin.Context) {
 		Type:    event.TypeConversationClosed,
 		Payload: map[string]any{"conversation": updated},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(conv.TenantID, conv.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(conv.TenantID, conv.StoreID, hub.Envelope{
 		Type:    event.TypeConversationClosed,
 		Payload: map[string]any{"conversation": updated},
 	})

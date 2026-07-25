@@ -270,7 +270,7 @@ func (h *AdminHandler) accept(c *gin.Context) {
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(updated.TenantID, updated.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(updated.TenantID, updated.StoreID, hub.Envelope{
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
@@ -346,7 +346,7 @@ func (h *AdminHandler) postMessage(c *gin.Context) {
 		Type:    event.TypeMessageCreated,
 		Payload: map[string]any{"message": msg},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(conv.TenantID, conv.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(conv.TenantID, conv.StoreID, hub.Envelope{
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation_id": conv.ID, "last_message": msg},
 	})
@@ -367,7 +367,7 @@ func (h *AdminHandler) reopen(c *gin.Context) {
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(conv.TenantID, conv.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(conv.TenantID, conv.StoreID, hub.Envelope{
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
@@ -397,7 +397,7 @@ func (h *AdminHandler) close(c *gin.Context) {
 		Type:    event.TypeConversationClosed,
 		Payload: map[string]any{"conversation": updated},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(conv.TenantID, conv.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(conv.TenantID, conv.StoreID, hub.Envelope{
 		Type:    event.TypeConversationClosed,
 		Payload: map[string]any{"conversation": updated},
 	})
@@ -568,7 +568,7 @@ func (h *AdminHandler) acceptNext(c *gin.Context) {
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
-	h.d.Hub.Broadcast(hub.RoomInbox(updated.TenantID, updated.StoreID), hub.Envelope{
+	h.d.Hub.BroadcastInbox(updated.TenantID, updated.StoreID, hub.Envelope{
 		Type:    event.TypeConversationUpdated,
 		Payload: map[string]any{"conversation": updated},
 	})
