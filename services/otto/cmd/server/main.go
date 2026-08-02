@@ -12,6 +12,7 @@ import (
 	"github.com/tesserix/slm-support-platform/services/otto/internal/changestream"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/config"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/conversation"
+	"github.com/tesserix/slm-support-platform/services/otto/internal/event"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/httpserver"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/hub"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/logger"
@@ -196,15 +197,31 @@ func main() {
 	}
 	go sweeper.Run(ctx)
 
+	// Optional NATS bridge — queue-lifecycle transitions (created /
+	// escalated / accepted / closed) for product backends to consume
+	// durably. Dark when NATS_URL is unset; a nil publisher is safe.
+	queuePub, err := event.NewNATSPublisher(cfg.NATSURL, cfg.NATSSubjectPrefix, log)
+	if err != nil {
+		log.Warn("nats: queue publisher disabled", "err", err)
+	} else if queuePub != nil {
+		log.Info("nats: queue publisher connected", "prefix", cfg.NATSSubjectPrefix)
+		defer queuePub.Close()
+	}
+
 	// Mongo change-stream watcher — rebroadcasts inserts on `messages`
 	// and updates on `conversations` to the WebSocket hub so writes
 	// from slm-router (assistant replies, status flips to active) hit
 	// the customer browser in real time. Without this the widget only
-	// sees those changes on a manual refresh.
+	// sees those changes on a manual refresh. Also the single funnel
+	// every conversation transition passes through (otto handlers AND
+	// slm-router's direct Mongo writes), so queue events derive here.
 	watcher := &changestream.Watcher{
 		DB:     mongoClient.DB(),
 		Hub:    h,
 		Logger: log,
+	}
+	if queuePub != nil {
+		watcher.Queue = queuePub
 	}
 	go watcher.Run(ctx)
 

@@ -197,6 +197,26 @@ var TenantReasons = map[string]struct {
 			ReasonGeneralQuestion: true,
 		},
 	},
+	// HomeChef vendor/chef side — same product, separate queue. The
+	// homechef-api mobile proxy picks this tenant for callers with the
+	// chef role so chef threads land in their own inbox lane and route
+	// to the vendor knowledge base (slm-router aliases it to homechef
+	// until a dedicated vendor namespace ships).
+	"homechef-vendor": {
+		Whitelist: map[string]bool{
+			"payout_issue":        true,
+			"order_management":    true,
+			"menu_help":           true,
+			"verification_docs":   true,
+			"account_issue":       true,
+			"other":               true,
+			ReasonGeneralQuestion: true,
+		},
+		NeedsDOB: map[string]bool{},
+		NoStatus: map[string]bool{
+			ReasonGeneralQuestion: true,
+		},
+	},
 	"stockpilot": {
 		Whitelist: map[string]bool{
 			"portfolio_question":  true,

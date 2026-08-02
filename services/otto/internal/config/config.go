@@ -41,6 +41,13 @@ type Config struct {
 	// without going through the app's server-side proxy first).
 	InternalAuthSecret string `envconfig:"INTERNAL_AUTH_SECRET" default:""`
 
+	// NATS — optional queue-event bridge. When NATS_URL is empty the
+	// publisher is dark and queue transitions are only visible on the
+	// admin WebSocket. Product backends (homechef-api et al.) capture
+	// the subjects with their own JetStream streams.
+	NATSURL           string `envconfig:"NATS_URL" default:""`
+	NATSSubjectPrefix string `envconfig:"NATS_SUBJECT_PREFIX" default:"otto.support"`
+
 	// CORS — comma-separated list of origins allowed to call the service
 	// directly (the WebSocket upgrade needs this; REST calls go through the
 	// Next.js proxy and do not).

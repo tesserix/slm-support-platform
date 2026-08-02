@@ -30,11 +30,19 @@ type Broadcaster interface {
 	BroadcastInbox(tenantID, storeID string, env hub.Envelope)
 }
 
+// QueuePublisher receives derived queue-lifecycle transitions (created /
+// escalated / accepted / closed). *event.NATSPublisher satisfies this and
+// is nil-safe, so the field can be left unset.
+type QueuePublisher interface {
+	Publish(ev event.QueueEvent)
+}
+
 // Watcher streams Mongo change events on `messages` (insert) and
 // `conversations` (update) and forwards them onto the WebSocket hub.
 type Watcher struct {
 	DB     *mongo.Database
 	Hub    Broadcaster
+	Queue  QueuePublisher
 	Logger *slog.Logger
 }
 
@@ -123,8 +131,11 @@ func (w *Watcher) watchConversations(ctx context.Context) {
 
 func (w *Watcher) handleConversation(raw bson.Raw) {
 	var ev struct {
-		OperationType string `bson:"operationType"`
-		FullDocument  bson.Raw `bson:"fullDocument"`
+		OperationType     string   `bson:"operationType"`
+		FullDocument      bson.Raw `bson:"fullDocument"`
+		UpdateDescription struct {
+			UpdatedFields bson.Raw `bson:"updatedFields"`
+		} `bson:"updateDescription"`
 	}
 	if err := bson.Unmarshal(raw, &ev); err != nil {
 		w.log().Warn("decode conversation change event", "err", err)
@@ -133,12 +144,7 @@ func (w *Watcher) handleConversation(raw bson.Raw) {
 	if len(ev.FullDocument) == 0 {
 		return
 	}
-	var doc struct {
-		ID       string `bson:"_id"`
-		TenantID string `bson:"tenant_id"`
-		StoreID  string `bson:"store_id"`
-		Status   string `bson:"status"`
-	}
+	var doc convDoc
 	if err := bson.Unmarshal(ev.FullDocument, &doc); err != nil {
 		w.log().Warn("decode conversation doc", "err", err)
 		return
@@ -146,6 +152,7 @@ func (w *Watcher) handleConversation(raw bson.Raw) {
 	if doc.ID == "" {
 		return
 	}
+	w.publishQueueTransition(ev.OperationType, ev.UpdateDescription.UpdatedFields, doc)
 	// Forward the FULL conversation document so the widget can
 	// rehydrate its local state (status, counters, last messages, …)
 	// from a single envelope.
@@ -167,6 +174,100 @@ func (w *Watcher) handleConversation(raw bson.Raw) {
 	if doc.TenantID != "" && doc.StoreID != "" {
 		w.Hub.BroadcastInbox(doc.TenantID, doc.StoreID, envelope)
 	}
+}
+
+// convDoc is the projection of a conversation document the watcher needs
+// for hub envelopes and queue events.
+type convDoc struct {
+	ID         string    `bson:"_id"`
+	CaseID     string    `bson:"case_id"`
+	TenantID   string    `bson:"tenant_id"`
+	StoreID    string    `bson:"store_id"`
+	Status     string    `bson:"status"`
+	Subject    string    `bson:"subject"`
+	NeedsHuman bool      `bson:"needs_human"`
+	UpdatedAt  time.Time `bson:"updated_at"`
+	CreatedAt  time.Time `bson:"created_at"`
+	Customer   struct {
+		UserID string `bson:"user_id"`
+		Name   string `bson:"name"`
+		Email  string `bson:"email"`
+	} `bson:"customer"`
+	Assignee *struct {
+		Name string `bson:"name"`
+	} `bson:"assignee"`
+	Intake *struct {
+		Reason string `bson:"reason"`
+		Status string `bson:"status"`
+	} `bson:"intake"`
+}
+
+// publishQueueTransition derives the queue-lifecycle event for this Mongo
+// change and hands it to the Queue publisher. Only genuine transitions
+// publish — counter bumps and message-count updates stay silent:
+//
+//	insert                         → created
+//	update sets needs_human=true   → escalated (slm-router handed off)
+//	update sets status=active      → accepted  (staff took the thread)
+//	update sets status=closed      → closed
+func (w *Watcher) publishQueueTransition(op string, updated bson.Raw, doc convDoc) {
+	if w.Queue == nil {
+		return
+	}
+	var name string
+	switch op {
+	case "insert":
+		name = event.QueueCreated
+	case "update":
+		var uf struct {
+			Status     *string `bson:"status"`
+			NeedsHuman *bool   `bson:"needs_human"`
+		}
+		if len(updated) == 0 {
+			return
+		}
+		if err := bson.Unmarshal(updated, &uf); err != nil {
+			return
+		}
+		switch {
+		case uf.NeedsHuman != nil && *uf.NeedsHuman:
+			name = event.QueueEscalated
+		case uf.Status != nil && *uf.Status == "active":
+			name = event.QueueAccepted
+		case uf.Status != nil && *uf.Status == "closed":
+			name = event.QueueClosed
+		default:
+			return
+		}
+	default:
+		return
+	}
+
+	qe := event.QueueEvent{
+		Event:          name,
+		TenantID:       doc.TenantID,
+		StoreID:        doc.StoreID,
+		ConversationID: doc.ID,
+		CaseID:         doc.CaseID,
+		Status:         doc.Status,
+		NeedsHuman:     doc.NeedsHuman,
+		Subject:        doc.Subject,
+		CustomerUserID: doc.Customer.UserID,
+		CustomerName:   doc.Customer.Name,
+		CustomerEmail:  doc.Customer.Email,
+		OccurredAt:     doc.UpdatedAt,
+	}
+	if qe.OccurredAt.IsZero() {
+		qe.OccurredAt = doc.CreatedAt
+	}
+	if doc.Assignee != nil {
+		qe.AssigneeName = doc.Assignee.Name
+	}
+	if doc.Intake != nil {
+		qe.IntakeReason = doc.Intake.Reason
+		qe.IntakeStatus = doc.Intake.Status
+	}
+	w.Queue.Publish(qe)
 }
 
 // stringifyTimes converts BSON DateTime values into RFC3339 strings
