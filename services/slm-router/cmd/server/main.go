@@ -52,9 +52,13 @@ func main() {
 
 	// --- OpenTelemetry (traces + metrics over OTLP/gRPC) ---
 	// No-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset (local/dev).
+	// Telemetry failure must never take the support brain down (a semconv
+	// schema mismatch crash-looped prod for days) — warn and run without it,
+	// same policy as otto.
 	otelShutdown, err := observability.Init(ctx, serviceName)
 	if err != nil {
-		log.Fatalf("otel init: %v", err)
+		lg.Warn("otel init failed — continuing without telemetry", "err", err.Error())
+		otelShutdown = func(context.Context) error { return nil }
 	}
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

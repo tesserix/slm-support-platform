@@ -19,7 +19,10 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	// MUST match the schema resource.Default() carries for this SDK version —
+	// a mismatch makes resource.Merge error and (pre-fix) crash-looped the
+	// service. SDK v1.44 defaults to schema 1.41.0.
+	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 )
 
 // defaultEndpoint is used when OTEL_EXPORTER_OTLP_ENDPOINT is unset but a
