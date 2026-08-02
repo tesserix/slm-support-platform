@@ -200,6 +200,36 @@ def _not_implemented(tool: str, reason: str) -> dict[str, Any]:
     }
 
 
+def _clean_date(value: Any) -> str:
+    """Accept a YYYY-MM-DD date, reject anything else.
+
+    A small model will happily emit "12th July" or "last Tuesday". Passing that
+    through would make the backend ignore the filter and silently widen the
+    window back to every order — so validate here and ask, rather than answer
+    confidently about the wrong dates.
+    """
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        return ""
+
+
+def _bad_date(field: str, given: Any) -> dict[str, Any]:
+    return {
+        "error": "bad_date",
+        "field": field,
+        "given": str(given),
+        "_action_for_assistant": (
+            f"{field} must be an exact calendar date as YYYY-MM-DD. Work out the "
+            "date the customer means (ask them if it is ambiguous) and call this "
+            "tool again — do not describe results you have not fetched."
+        ),
+    }
+
+
 def _check_range(days: Any, max_days: int) -> dict[str, Any] | int:
     """Validate a customer-specified `days` window for history tools.
 
@@ -621,18 +651,52 @@ def _register_homechef(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="list_recent_orders",
         description=(
-            "List a customer's HomeChef orders placed in the last N days. "
-            "days defaults to 14, MAX 30. range_exceeded for longer windows "
-            "— surface that and ask the customer to raise a support ticket."
+            "List a customer's HomeChef orders. Use `days` for a rolling window "
+            "(default 14, MAX 30). For a specific date or span the customer "
+            "names — 'what did I order on the 12th', 'my orders in July' — pass "
+            "`date_from`/`date_to` as YYYY-MM-DD instead; both ends are "
+            "inclusive, and passing the same date for each returns that one "
+            "day. Each order carries its payment status, total, refund amount "
+            "and payment method, so answer payment questions from this rather "
+            "than guessing. range_exceeded for longer rolling windows — surface "
+            "that and offer a date range instead."
         ),
     )
-    async def list_recent_orders(days: int = 14) -> dict[str, Any]:
+    async def list_recent_orders(
+        days: int = 14,
+        date_from: str = "",
+        date_to: str = "",
+    ) -> dict[str, Any]:
         # The customer is taken from the verified conversation context (never a
         # model arg); the backend scopes /api/v1/orders to that user.
-        clamped = _check_range(days, max_days=30)
-        if isinstance(clamped, dict):
-            return clamped | {"source": "homechef-api"}
         path = "/api/v1/orders"
+        params: dict[str, Any] = {"limit": 50}
+
+        # An explicit range wins over the rolling window: the customer named a
+        # date, so honouring `days` as well would silently re-narrow it.
+        explicit = _clean_date(date_from), _clean_date(date_to)
+        if any(explicit):
+            if date_from and not explicit[0]:
+                return _bad_date("date_from", date_from)
+            if date_to and not explicit[1]:
+                return _bad_date("date_to", date_to)
+            if explicit[0]:
+                params["from"] = explicit[0]
+            if explicit[1]:
+                params["to"] = explicit[1]
+        else:
+            clamped = _check_range(days, max_days=30)
+            if isinstance(clamped, dict):
+                return clamped | {
+                    "source": "homechef-api",
+                    "_action_for_assistant": (
+                        "That window is too long for a rolling lookup. Ask the "
+                        "customer which dates they mean and call this again "
+                        "with date_from/date_to."
+                    ),
+                }
+            params["since_days"] = clamped
+
         headers = _homechef_signed_headers(cfg, "GET", path)
         if headers is None:
             return {
@@ -644,7 +708,7 @@ def _register_homechef(mcp, cfg: Config) -> None:
             }
         return await _get_json(
             cfg.homechef_api_url, path, source="homechef-api",
-            params={"since_days": clamped, "limit": 50}, headers=headers,
+            params=params, headers=headers,
         )
 
     @mcp.tool(
