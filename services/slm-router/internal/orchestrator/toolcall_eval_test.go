@@ -132,8 +132,13 @@ func TestToolCallReliability(t *testing.T) {
 	)
 
 	// The eval must see the SAME prompt production sends, or it measures a
-	// prompt nobody ships. Build it through the real PromptBuilder.
+	// prompt nobody ships — including the tool directive the orchestrator
+	// appends whenever tools were discovered, which is the whole difference
+	// between a tool call and a sentence about one.
 	systemPrompt := loadSystemPrompt(t)
+	if os.Getenv("OTTO_EVAL_NO_TOOL_DIRECTIVE") == "" {
+		systemPrompt += ToolUseDirective
+	}
 	customer := otto.CustomerIdentity{
 		UserID: "7c9e6679-7425-40de-944b-e07fc1f90ae7",
 		Email:  "eval.customer@example.com",
@@ -276,8 +281,7 @@ func loadSystemPrompt(t *testing.T) string {
 		return string(b)
 	}
 	return "You are Otto, the support assistant for Fe3dr, a home-chef food " +
-		"delivery service. Use the tools available to you to look up real order, " +
-		"delivery and chef data before answering. Never invent an order id."
+		"delivery service. Answer briefly and never invent an order id."
 }
 
 func pruneAutoTwins(tools []inference.Tool) []inference.Tool {

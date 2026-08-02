@@ -47,9 +47,9 @@ type Orchestrator struct {
 }
 
 type toolCacheEntry struct {
-	tools     []inference.Tool
-	servers   map[string]mcp.ServerRef // function name → which MCP server hosts it
-	cachedAt  time.Time
+	tools    []inference.Tool
+	servers  map[string]mcp.ServerRef // function name → which MCP server hosts it
+	cachedAt time.Time
 }
 
 const (
@@ -221,13 +221,18 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 		CustomerName:   customer.Name,
 		CaseID:         "",
 	}
-	msgs := PromptBuilder{}.Build(systemPrompt, customer, topChunks, history, ev.Body)
-
-	// 5. Discover tools for this tenant.
+	// 5. Discover tools for this tenant. Must run BEFORE the prompt is built:
+	// the model has to be TOLD to call them, and told the exact block to emit,
+	// or it answers in prose about the tool instead of calling it.
 	tools, toolMap, err := o.resolveTools(ctx, ev.TenantID, mcpCtx, product.MCPServers)
 	if err != nil {
 		log.Warn("tool discovery failed, proceeding without tools", "err", err.Error())
 	}
+	if len(tools) > 0 {
+		systemPrompt += ToolUseDirective
+	}
+
+	msgs := PromptBuilder{}.Build(systemPrompt, customer, topChunks, history, ev.Body)
 
 	// 6. First inference call.
 	resp, err := o.deps.Inference.Chat(ctx, inference.ChatRequest{
@@ -238,7 +243,7 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 		// surfaces work best when the assistant is crisp; longer
 		// answers also blow past the per-slot context window on
 		// follow-up turns.
-		MaxTokens:   180,
+		MaxTokens: 180,
 	})
 	if err != nil {
 		log.Error("inference failed", "err", err.Error())

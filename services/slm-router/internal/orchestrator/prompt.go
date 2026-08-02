@@ -115,6 +115,36 @@ func (PromptBuilder) Build(systemPrompt string, customer otto.CustomerIdentity, 
 	return msgs
 }
 
+// ToolUseDirective is appended to the system prompt whenever tools were
+// discovered for the tenant. Without it a 1.5B model calls them 0% of the time.
+//
+// The tools were wired correctly all along: registered, discovered, attached to
+// every request, and llama.cpp parses a <tool_call> block into a structured
+// call the moment the model emits one. It just never emitted one — it answered
+// "I will use the get_order_status function. Please provide the order ID",
+// in prose, about data it was holding the tool for. Nothing in the prompt asked
+// it to call anything, while the rest of it pushes hard toward a short written
+// answer, so prose is what it optimised for.
+//
+// A 1.5B does not infer the protocol from the tool list the way a frontier
+// model does; it needs the format shown. Spelling out the exact block is the
+// difference between a tool call and a sentence about one.
+const ToolUseDirective = "\n\nTools:\n" +
+	"- You have tools. When the customer asks about a specific order, delivery, " +
+	"chef, or their own history, you MUST call the matching tool BEFORE answering. " +
+	"You do not know this data — only the tool does, and answering without it is a " +
+	"guess dressed as a fact.\n" +
+	"- To call one, emit EXACTLY this and nothing else:\n" +
+	"<tool_call>\n{\"name\": \"<tool name>\", \"arguments\": {\"<arg>\": \"<value>\"}}\n</tool_call>\n" +
+	"- Never announce a call in words (\"I will use the … function\") — that is not a " +
+	"call, it is a sentence, and the customer gets nothing. Emit the block.\n" +
+	"- Never ask the customer for an id they already gave you in their message; take " +
+	"it from there and pass it as the argument.\n" +
+	"- Once the tool result comes back, answer from it in the normal voice and " +
+	"length rules above.\n" +
+	"- For general how-does-this-work questions with no specific record involved, " +
+	"answer from the context without a tool.\n"
+
 func historyRole(senderType string) inference.Role {
 	switch senderType {
 	case "customer":
