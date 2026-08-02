@@ -233,6 +233,13 @@ func (w *Watcher) publishQueueTransition(op string, updated bson.Raw, doc convDo
 		case uf.NeedsHuman != nil && *uf.NeedsHuman:
 			name = event.QueueEscalated
 		case uf.Status != nil && *uf.Status == "active":
+			// active alone does not mean a person took the thread — the AI
+			// answering flips it too. Only an assignee marks a real accept;
+			// without this check the consumer cancels its wait-for-staff
+			// timers the moment the bot replies.
+			if doc.Assignee == nil {
+				return
+			}
 			name = event.QueueAccepted
 		case uf.Status != nil && *uf.Status == "closed":
 			name = event.QueueClosed
