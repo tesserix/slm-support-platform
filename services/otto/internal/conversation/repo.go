@@ -101,6 +101,37 @@ func (r *Repository) LatestOpenForSession(ctx context.Context, tenantID, storeID
 	return &c, nil
 }
 
+// ListForCustomerUser returns a signed-in customer's own conversation history,
+// newest first. Scoped by the verified user_id an upstream proxy injects (not
+// by session cookie), so it survives reinstalls and new devices — a customer
+// can always see the threads they raised, resolved or not.
+func (r *Repository) ListForCustomerUser(ctx context.Context, tenantID, storeID, userID string, limit int64) ([]Conversation, error) {
+	if userID == "" {
+		return []Conversation{}, nil
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	filter := bson.M{
+		"tenant_id":        tenantID,
+		"store_id":         storeID,
+		"customer.user_id": userID,
+	}
+	opts := options.Find().
+		SetSort(bson.D{{Key: "last_message_at", Value: -1}}).
+		SetLimit(limit)
+	cur, err := r.coll.Find(ctx, filter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+	out := []Conversation{}
+	if err := cur.All(ctx, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // GetForCustomer looks up a conversation a specific anonymous session is
 // allowed to see. The session_token match is the customer-side auth check —
 // without it, a malicious customer could poll arbitrary ids.

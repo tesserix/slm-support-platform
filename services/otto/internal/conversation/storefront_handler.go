@@ -89,6 +89,10 @@ func (h *StorefrontHandler) Register(r *gin.RouterGroup) {
 	// soft-fails (returns conversation:null) when there's no cookie, no
 	// open thread, or the cookie is for a different store.
 	r.GET("/resume", h.resume)
+	// A signed-in customer's own chat history. Scoped by the verified
+	// X-User-Id the upstream proxy injects, so it needs no session cookie
+	// and survives reinstalls — the app lists past threads and their state.
+	r.GET("/conversations", h.history)
 
 	// These require a valid otto_session cookie already.
 	withSession := r.Group("")
@@ -358,6 +362,26 @@ func (h *StorefrontHandler) create(c *gin.Context) {
 // different scope, we return {conversation: null} with 200 so the widget
 // can cleanly fall through to its "start a fresh conversation" flow
 // without treating a missing thread as an error.
+// history lists the signed-in customer's own conversations, newest first.
+// Identity comes from the verified X-User-Id the proxy injects; anonymous
+// callers simply get an empty list rather than an error.
+func (h *StorefrontHandler) history(c *gin.Context) {
+	tenantID := c.GetString(auth.CtxTenantID)
+	storeID := c.GetString(auth.CtxStoreID)
+	userID := c.GetHeader("X-User-Id")
+	if userID == "" {
+		c.JSON(http.StatusOK, gin.H{"conversations": []Conversation{}})
+		return
+	}
+	items, err := h.d.Conversations.ListForCustomerUser(c.Request.Context(), tenantID, storeID, userID, 20)
+	if err != nil {
+		h.d.Logger.Error("otto: list customer history", "err", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "lookup_failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"conversations": items})
+}
+
 func (h *StorefrontHandler) resume(c *gin.Context) {
 	tenantID := c.GetString(auth.CtxTenantID)
 	storeID := c.GetString(auth.CtxStoreID)
