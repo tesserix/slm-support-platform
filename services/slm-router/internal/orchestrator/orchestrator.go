@@ -112,6 +112,18 @@ func (o *Orchestrator) processOne(ctx context.Context, ev watcher.CustomerMessag
 		"message_id", ev.MessageID,
 	)
 
+	// Never talk over a person. Once staff accept the thread they own the
+	// exchange, and once a handoff is requested the customer is waiting for
+	// a human — answering in either case produces the assistant and an agent
+	// replying to the same message.
+	if state, err := o.deps.Otto.State(ctx, ev.ConversationID); err != nil {
+		log.Warn("conversation state lookup failed; answering anyway", "err", err.Error())
+	} else if state.HumanOwned() {
+		log.Info("human owns this conversation, staying silent",
+			"status", state.Status, "assignee", state.HasAssignee, "needs_human", state.NeedsHuman)
+		return nil
+	}
+
 	product, productName, ok := o.deps.Config.Routes.ResolveProduct(ev.TenantID)
 	if !ok {
 		// Unknown tenant and no default fallback — escalate so a human

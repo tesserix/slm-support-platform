@@ -37,6 +37,9 @@ type Writer interface {
 	// opened the conversation. Empty struct (no error) is returned for
 	// anonymous threads or conversations that don't exist yet.
 	Customer(ctx context.Context, conversationID string) (CustomerIdentity, error)
+	// State reports who owns the conversation right now, so the
+	// assistant can stay out of a thread a person is handling.
+	State(ctx context.Context, conversationID string) (ConversationState, error)
 }
 
 // CustomerIdentity is the subset of conversation.customer the
@@ -49,6 +52,21 @@ type CustomerIdentity struct {
 	Email  string
 	Name   string
 }
+
+// ConversationState is who currently owns a thread. The assistant answers
+// only while nobody else does.
+type ConversationState struct {
+	Status      string
+	NeedsHuman  bool
+	HasAssignee bool
+	Exists      bool
+}
+
+// HumanOwned reports whether a person is handling (or queued to handle)
+// this conversation. The assistant must stay silent in both cases: once
+// staff accept they own the exchange, and once a handoff is requested the
+// customer is waiting for a person, not another bot reply.
+func (s ConversationState) HumanOwned() bool { return s.HasAssignee || s.NeedsHuman }
 
 // HistoryMessage is one row of the conversation history.
 type HistoryMessage struct {
@@ -238,6 +256,37 @@ func (w *MongoWriter) Customer(ctx context.Context, conversationID string) (Cust
 		UserID: doc.Customer.UserID,
 		Email:  doc.Customer.Email,
 		Name:   doc.Customer.Name,
+	}, nil
+}
+
+// State reads the ownership fields of a conversation. A missing document
+// reports Exists=false rather than an error — the caller treats that as
+// "nothing to answer".
+func (w *MongoWriter) State(ctx context.Context, conversationID string) (ConversationState, error) {
+	if conversationID == "" {
+		return ConversationState{}, nil
+	}
+	var doc struct {
+		Status     string `bson:"status"`
+		NeedsHuman bool   `bson:"needs_human"`
+		Assignee   *struct {
+			UserID string `bson:"user_id"`
+		} `bson:"assignee,omitempty"`
+	}
+	err := w.db.Collection("conversations").
+		FindOne(ctx, bson.M{"_id": conversationID}).
+		Decode(&doc)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return ConversationState{}, nil
+		}
+		return ConversationState{}, fmt.Errorf("load conversation state: %w", err)
+	}
+	return ConversationState{
+		Status:      doc.Status,
+		NeedsHuman:  doc.NeedsHuman,
+		HasAssignee: doc.Assignee != nil && doc.Assignee.UserID != "",
+		Exists:      true,
 	}, nil
 }
 
