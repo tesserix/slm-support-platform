@@ -40,6 +40,7 @@ func (h *PlatformHandler) Register(r *gin.RouterGroup) {
 	r.POST("/conversations/:id/accept", h.withScope(h.admin.accept))
 	r.POST("/conversations/:id/messages", h.withScope(h.admin.postMessage))
 	r.POST("/conversations/:id/close", h.withScope(h.admin.close))
+	r.POST("/conversations/:id/reopen", h.withScope(h.admin.reopen))
 	r.POST("/ws-ticket", h.inboxWSTicket)
 	r.POST("/conversations/:id/ws-ticket", h.conversationWSTicket)
 }
