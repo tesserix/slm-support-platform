@@ -63,10 +63,14 @@ func NewNATSPublisher(url, prefix string, log *slog.Logger) (*NATSPublisher, err
 	if prefix == "" {
 		prefix = "otto.support"
 	}
+	// RetryOnFailedConnect: a NATS outage (or a network policy that lands
+	// after boot) must not permanently dark the publisher — the connection
+	// establishes in the background and publishes flow once it's up.
 	nc, err := nats.Connect(url,
 		nats.Name("support-platform-otto"),
 		nats.MaxReconnects(-1),
 		nats.ReconnectWait(2*time.Second),
+		nats.RetryOnFailedConnect(true),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("nats connect: %w", err)
