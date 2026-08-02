@@ -57,6 +57,12 @@ func (h *PlatformHandler) RegisterWS(r *gin.RouterGroup) {
 // tenant+store into the context, then runs the tenant-scoped admin
 // handler. Every downstream repo write therefore stays scoped to the
 // row's own tenant — platform access never widens a write.
+//
+// The loaded row is handed on via CtxConversation so loadForStaff reuses
+// it instead of re-querying: the second lookup filtered on store_id = ""
+// for a row whose store_id field is simply absent, which Mongo does not
+// match, so every per-conversation action 404'd on a row this middleware
+// had just found (#live-chat).
 func (h *PlatformHandler) withScope(next gin.HandlerFunc) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		conv, ok := h.loadAnyTenant(c)
@@ -65,6 +71,7 @@ func (h *PlatformHandler) withScope(next gin.HandlerFunc) gin.HandlerFunc {
 		}
 		c.Set(auth.CtxTenantID, conv.TenantID)
 		c.Set(auth.CtxStoreID, conv.StoreID)
+		c.Set(CtxConversation, conv)
 		next(c)
 	}
 }

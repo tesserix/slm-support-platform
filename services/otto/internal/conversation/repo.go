@@ -45,6 +45,18 @@ type Repository struct {
 
 func NewRepository(coll *mongo.Collection) *Repository { return &Repository{coll: coll} }
 
+// storeScope builds the store_id clause for a READ filter. An empty store
+// also matches rows where the field is absent: Insert has required store_id
+// since it was added, but conversations written before that guard carry none,
+// and `store_id: ""` does not match a missing field in Mongo. Writes keep
+// plain equality — this only ever widens a read to the row's own tenant.
+func storeScope(storeID string) any {
+	if storeID == "" {
+		return bson.M{"$in": bson.A{"", nil}}
+	}
+	return storeID
+}
+
 // Insert creates a new pending conversation.
 func (r *Repository) Insert(ctx context.Context, c *Conversation) error {
 	if c.ID == "" || c.TenantID == "" || c.StoreID == "" {
@@ -67,7 +79,7 @@ func (r *Repository) Insert(ctx context.Context, c *Conversation) error {
 // GetByID enforces scope: a caller with tenant A cannot fetch a conversation
 // belonging to tenant B even if they know the id.
 func (r *Repository) GetByID(ctx context.Context, tenantID, storeID, id string) (*Conversation, error) {
-	filter := bson.M{"_id": id, "tenant_id": tenantID, "store_id": storeID}
+	filter := bson.M{"_id": id, "tenant_id": tenantID, "store_id": storeScope(storeID)}
 	var c Conversation
 	if err := r.coll.FindOne(ctx, filter).Decode(&c); err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {

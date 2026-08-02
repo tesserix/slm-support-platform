@@ -687,9 +687,20 @@ func (h *AdminHandler) conversationWebsocket(c *gin.Context) {
 	client.Run(h.d.Hub)
 }
 
+// CtxConversation carries a conversation already loaded and authorized by
+// upstream middleware (the platform inbox's withScope). Its presence means
+// the row has been resolved and its real tenant+store pinned, so loadForStaff
+// must not re-query — see withScope for why the second lookup could miss.
+const CtxConversation = "otto.conversation"
+
 // loadForStaff loads a conversation and confirms it belongs to the staff
 // caller's tenant+store. Returns false after writing an error response.
 func (h *AdminHandler) loadForStaff(c *gin.Context) (*Conversation, bool) {
+	// Already resolved upstream (platform inbox) — reuse it rather than
+	// running a second, narrower query against the same row.
+	if conv, ok := c.Value(CtxConversation).(*Conversation); ok && conv != nil {
+		return conv, true
+	}
 	id := c.Param("id")
 	tenantID := c.GetString(auth.CtxTenantID)
 	storeID := c.GetString(auth.CtxStoreID)

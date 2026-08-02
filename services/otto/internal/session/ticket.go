@@ -68,8 +68,13 @@ func (s *TicketSigner) Issue(t Ticket) (string, Ticket, error) {
 	if t.Audience == "" {
 		return "", Ticket{}, errors.New("ticket: audience required")
 	}
-	if t.TenantID == "" || t.StoreID == "" {
-		return "", Ticket{}, errors.New("ticket: tenant+store required")
+	// Tenant is the scope boundary and is mandatory. Store is not: a
+	// conversation predating the store_id write guard carries none, and
+	// rejecting it here 500'd the per-thread WebSocket ticket so those
+	// threads never went live. The ticket stays bound to tenant +
+	// conversation, which is what the WS handler re-verifies.
+	if t.TenantID == "" {
+		return "", Ticket{}, errors.New("ticket: tenant required")
 	}
 	nonceBytes := make([]byte, 16)
 	if _, err := rand.Read(nonceBytes); err != nil {

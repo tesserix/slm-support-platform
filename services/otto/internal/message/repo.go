@@ -18,6 +18,18 @@ type Repository struct {
 
 func NewRepository(coll *mongo.Collection) *Repository { return &Repository{coll: coll} }
 
+// storeScope builds the store_id clause for a READ filter. An empty store
+// also matches rows where the field is absent — Insert has required store_id
+// since it was added, but messages written before that guard carry none, and
+// `store_id: ""` does not match a missing field in Mongo. Writes keep plain
+// equality; this only widens a read within the caller's own tenant.
+func storeScope(storeID string) any {
+	if storeID == "" {
+		return bson.M{"$in": bson.A{"", nil}}
+	}
+	return storeID
+}
+
 // Insert writes a new message.
 func (r *Repository) Insert(ctx context.Context, m *Message) error {
 	if m.ID == "" || m.ConversationID == "" || m.TenantID == "" || m.StoreID == "" {
@@ -39,7 +51,7 @@ func (r *Repository) ListByConversation(ctx context.Context, tenantID, storeID, 
 	filter := bson.M{
 		"conversation_id": convID,
 		"tenant_id":       tenantID,
-		"store_id":        storeID,
+		"store_id":        storeScope(storeID),
 	}
 	opts := options.Find().
 		SetSort(bson.D{{Key: "created_at", Value: 1}}).
