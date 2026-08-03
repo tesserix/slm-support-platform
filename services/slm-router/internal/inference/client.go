@@ -103,12 +103,17 @@ type HTTPClient struct {
 	model   string
 }
 
+// defaultInferenceTimeout applies when the caller passes no WithTimeout.
+// Deployments set INFERENCE_TIMEOUT; this only guards a bare NewHTTP.
+const defaultInferenceTimeout = 180 * time.Second
+
 // Option configures the HTTPClient. Keep it tiny — orthogonal knobs
 // per option, no struct sprawl.
 type Option func(*HTTPClient)
 
-// WithTimeout sets the per-request timeout. Default 60s — chat
-// completions on a 1.5B model on CPU comfortably finish in 30s.
+// WithTimeout sets the per-request timeout. The default below is a floor, not
+// a target: on CPU the whole prompt is ingested before the first token, so the
+// budget must cover ingest + generation or the request dies mid-ingest.
 func WithTimeout(d time.Duration) Option {
 	return func(c *HTTPClient) {
 		c.http.Timeout = d
@@ -129,7 +134,7 @@ func WithModel(name string) Option {
 func NewHTTP(baseURL string, opts ...Option) *HTTPClient {
 	c := &HTTPClient{
 		baseURL: baseURL,
-		http:    &http.Client{Timeout: 60 * time.Second},
+		http:    &http.Client{Timeout: defaultInferenceTimeout},
 		model:   "qwen2.5-1.5b-instruct",
 	}
 	for _, o := range opts {

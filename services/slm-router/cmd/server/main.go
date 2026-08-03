@@ -111,7 +111,7 @@ func main() {
 		Embedder:  embed.NewHTTP(cfg.Env.EmbedderURL, embed.WithExpectedDim(384)),
 		Retriever: retriever.NewPostgres(pg),
 		Reranker:  rerank.NewHTTP(cfg.Env.RerankerURL),
-		Inference: inference.NewHTTP(cfg.Env.InferenceURL),
+		Inference: inference.NewHTTP(cfg.Env.InferenceURL, inference.WithTimeout(cfg.Env.InferenceTimeout)),
 		MCP:       mcp.NewHTTP(),
 		Otto:      otto.NewMongoWriter(mongoDB),
 		Logger:    lg,

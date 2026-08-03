@@ -46,6 +46,10 @@ type Env struct {
 	// Endpoint of slm-inference (OpenAI-compatible HTTP API, e.g. vLLM
 	// or llama.cpp's server mode).
 	InferenceURL string `envconfig:"INFERENCE_URL" default:"http://slm-inference.support-platform.svc.cluster.local:8000"`
+	// Per-request budget for a chat completion. On CPU the model must INGEST the
+	// prompt before emitting a token — ~2800 tokens at ~47 tok/s is already 60s,
+	// so the old hardcoded 60s cancelled mid-ingest and Otto answered nothing.
+	InferenceTimeout time.Duration `envconfig:"INFERENCE_TIMEOUT" default:"180s"`
 	// Endpoint of the embedder (POST /embed → []float32).
 	EmbedderURL string `envconfig:"EMBEDDER_URL" default:"http://embedder.support-platform.svc.cluster.local:8001"`
 	// Endpoint of the reranker (POST /rerank → ordered scores).
