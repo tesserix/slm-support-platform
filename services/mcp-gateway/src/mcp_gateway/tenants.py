@@ -6,6 +6,7 @@ backend route doesn't exist yet, the tool returns a structured
 `not_implemented` response — never fake data — so the SLM tells the
 customer "I can't fetch that yet" instead of inventing numbers.
 """
+
 from __future__ import annotations
 
 import base64
@@ -15,11 +16,11 @@ import logging
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlencode
 
 import httpx
 
 from .config import Config
-
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ def _trusted_ctx() -> dict[str, str]:
     Lazy import of server avoids the server->tenants import cycle."""
     try:
         from .server import request_ctx
+
         return request_ctx.get() or {}
     except Exception:
         return {}
@@ -153,6 +155,7 @@ async def _post(
     source: str,
     json_body: dict[str, Any] | None = None,
     form: dict[str, Any] | None = None,
+    content: bytes | None = None,
     headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """POST {base_url}{path} with a JSON or form body; return the parsed
@@ -166,7 +169,9 @@ async def _post(
     url = f"{base_url}{path}"
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
-            res = await client.post(url, json=json_body, data=form, headers=headers)
+            res = await client.post(
+                url, json=json_body, data=form, content=content, headers=headers
+            )
         if 200 <= res.status_code < 300:
             try:
                 body = res.json()
@@ -263,8 +268,14 @@ def _entry_ts(entry: dict[str, Any]) -> datetime | None:
     """Best-effort ISO8601 parse off whichever timestamp field the
     backend uses. Returns None when nothing parses cleanly."""
     for key in (
-        "created_at", "createdAt", "timestamp", "at",
-        "placed_at", "occurred_at", "ts", "date",
+        "created_at",
+        "createdAt",
+        "timestamp",
+        "at",
+        "placed_at",
+        "occurred_at",
+        "ts",
+        "date",
     ):
         raw = entry.get(key)
         if not raw:
@@ -311,7 +322,9 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             }
         path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}"
         return await _get_json(
-            cfg.mark8ly_orders_url, path, source="mp-orders",
+            cfg.mark8ly_orders_url,
+            path,
+            source="mp-orders",
             headers=_customer_scoped_headers(cfg),
         )
 
@@ -322,10 +335,13 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             "(no email-scoped endpoint exists). Returns RMA id, status, refund amount."
         ),
     )
-    async def list_returns(order_id: str, store_slug: str = "tesserix-store", limit: int = 5) -> dict[str, Any]:
+    async def list_returns(
+        order_id: str, store_slug: str = "tesserix-store", limit: int = 5
+    ) -> dict[str, Any]:
         path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}/returns"
         return await _get_json(
-            cfg.mark8ly_orders_url, path,
+            cfg.mark8ly_orders_url,
+            path,
             source="mp-orders",
             params={"limit": max(1, min(limit, 25))},
             headers=_customer_scoped_headers(cfg),
@@ -353,7 +369,9 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
             "number; do the actual lookup with get_order."
         ),
     )
-    async def list_recent_orders(email: str = "", days: int = 30, store_slug: str = "tesserix-store") -> dict[str, Any]:
+    async def list_recent_orders(
+        email: str = "", days: int = 30, store_slug: str = "tesserix-store"
+    ) -> dict[str, Any]:
         # There is no by-email order-list endpoint, and the content guard blocks
         # customers from sharing email/phone in chat — so order lookups are by
         # order number via get_order. Return a clear signal instead of calling a
@@ -453,14 +471,22 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
         escalation_reason: str = "",
     ) -> dict[str, Any]:
         ctx = _trusted_ctx()
-        missing = [k for k in ("conversation_id", "tenant_id", "store_id", "customer_email") if not ctx.get(k)]
+        missing = [
+            k
+            for k in ("conversation_id", "tenant_id", "store_id", "customer_email")
+            if not ctx.get(k)
+        ]
         if missing:
             return {
                 "error": "missing_context",
                 "missing": missing,
                 "_action_for_assistant": (
                     "Couldn't open a ticket — required context is missing"
-                    + (" (need the customer's email — ask for it)" if missing == ["customer_email"] else "")
+                    + (
+                        " (need the customer's email — ask for it)"
+                        if missing == ["customer_email"]
+                        else ""
+                    )
                     + ". Apologise and offer to connect them to a human instead."
                 ),
             }
@@ -539,6 +565,7 @@ def _register_fanzone(mcp, cfg: Config) -> None:
         if "error" in result:
             return result
         from datetime import timedelta as _td
+
         cutoff = _now() - _td(days=clamped)
         days = clamped
         entries = result.get("entries") or []
@@ -565,9 +592,7 @@ def _register_fanzone(mcp, cfg: Config) -> None:
             "user_id": user_id,
             "days_requested": days,
             "entries_in_window": in_window,
-            "by_day": [
-                {"date": d, **buckets[d]} for d in days_sorted
-            ],
+            "by_day": [{"date": d, **buckets[d]} for d in days_sorted],
             "source": "fanzone-user",
         }
 
@@ -615,7 +640,10 @@ def _register_homechef(mcp, cfg: Config) -> None:
                 ),
             }
         return await _get_json(
-            cfg.homechef_api_url, path, source="homechef-api", headers=headers,
+            cfg.homechef_api_url,
+            path,
+            source="homechef-api",
+            headers=headers,
         )
 
     @mcp.tool(
@@ -645,7 +673,10 @@ def _register_homechef(mcp, cfg: Config) -> None:
                 ),
             }
         return await _get_json(
-            cfg.homechef_api_url, path, source="homechef-api", headers=headers,
+            cfg.homechef_api_url,
+            path,
+            source="homechef-api",
+            headers=headers,
         )
 
     @mcp.tool(
@@ -707,8 +738,11 @@ def _register_homechef(mcp, cfg: Config) -> None:
                 ),
             }
         return await _get_json(
-            cfg.homechef_api_url, path, source="homechef-api",
-            params=params, headers=headers,
+            cfg.homechef_api_url,
+            path,
+            source="homechef-api",
+            params=params,
+            headers=headers,
         )
 
     @mcp.tool(
@@ -726,12 +760,25 @@ def _register_homechef(mcp, cfg: Config) -> None:
         reason: str,
         findings: str = "",
     ) -> dict[str, Any]:
-        # ReportIssue is a multipart form: reason, description, affectedItemIds[].
+        path = f"/api/v1/orders/{order_id}/report-issue"
+        form = {"reason": reason, "description": findings or reason}
+        content = urlencode(form).encode()
+        headers = _homechef_signed_headers(cfg, "POST", path, content)
+        if headers is None:
+            return {
+                "error": "identity_unverified",
+                "_action_for_assistant": (
+                    "Can't securely verify the customer to file this request. "
+                    "Ask them to sign in and try again."
+                ),
+            }
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
         result = await _post(
             cfg.homechef_api_url,
-            f"/orders/{order_id}/issues",
+            path,
             source="homechef-api",
-            form={"reason": reason, "description": findings or reason},
+            content=content,
+            headers=headers,
         )
         if "error" not in result:
             result["_status"] = "pending_admin_approval"
@@ -1007,7 +1054,15 @@ def _register_platform(mcp, cfg: Config) -> None:
         message: str,
         company: str = "",
     ) -> dict[str, Any]:
-        body = {"name": name, "email": email, "message": message, "company": company}
+        first_name, _, last_name = name.strip().partition(" ")
+        body = {
+            "firstName": first_name,
+            "lastName": last_name,
+            "email": email,
+            "message": message,
+            "company": company,
+            "interest": "demo",
+        }
         result = await _post(
             cfg.tesserix_home_url,
             "/api/contact",

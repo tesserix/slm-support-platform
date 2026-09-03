@@ -24,6 +24,11 @@ import (
 	"time"
 )
 
+const (
+	protocolVersion  = "2026-07-28"
+	maxResponseBytes = 1 << 20
+)
+
 // ServerRef describes one MCP server. Constructed from the YAML
 // tenant config; passed into Call/ListTools per invocation.
 type ServerRef struct {
@@ -148,8 +153,22 @@ func (e *rpcError) Error() string {
 	return fmt.Sprintf("MCP RPC error %d: %s", e.Code, e.Message)
 }
 
-// ListTools calls "tools/list".
+// ListTools discovers the server, then calls an independently complete tools/list.
 func (c *HTTPClient) ListTools(ctx context.Context, server ServerRef, cc CallContext) ([]Tool, error) {
+	discovery, err := c.do(ctx, server, cc, "server/discover", nil)
+	if err != nil {
+		return nil, fmt.Errorf("server/discover: %w", err)
+	}
+	var discovered struct {
+		SupportedVersions []string `json:"supportedVersions"`
+	}
+	if err := json.Unmarshal(discovery, &discovered); err != nil {
+		return nil, fmt.Errorf("decode server/discover: %w", err)
+	}
+	if !contains(discovered.SupportedVersions, protocolVersion) {
+		return nil, fmt.Errorf("server/discover: server does not support %s", protocolVersion)
+	}
+
 	resp, err := c.do(ctx, server, cc, "tools/list", nil)
 	if err != nil {
 		return nil, err
@@ -161,6 +180,15 @@ func (c *HTTPClient) ListTools(ctx context.Context, server ServerRef, cc CallCon
 		return nil, fmt.Errorf("decode tools/list: %w", err)
 	}
 	return out.Tools, nil
+}
+
+func contains(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 // Call invokes "tools/call".
@@ -181,8 +209,20 @@ func (c *HTTPClient) Call(ctx context.Context, server ServerRef, cc CallContext,
 }
 
 func (c *HTTPClient) do(ctx context.Context, server ServerRef, cc CallContext, method string, params map[string]any) (json.RawMessage, error) {
+	requestParams := make(map[string]any, len(params)+1)
+	for key, value := range params {
+		requestParams[key] = value
+	}
+	requestParams["_meta"] = map[string]any{
+		"io.modelcontextprotocol/protocolVersion":    protocolVersion,
+		"io.modelcontextprotocol/clientCapabilities": map[string]any{},
+		"io.modelcontextprotocol/clientInfo": map[string]any{
+			"name":    "slm-router",
+			"version": "1",
+		},
+	}
 	id := fmt.Sprintf("%s-%d", method, c.now().UnixNano())
-	rpc := rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params}
+	rpc := rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: requestParams}
 	body, err := json.Marshal(rpc)
 	if err != nil {
 		return nil, err
@@ -192,7 +232,12 @@ func (c *HTTPClient) do(ctx context.Context, server ServerRef, cc CallContext, m
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("MCP-Protocol-Version", protocolVersion)
+	req.Header.Set("MCP-Method", method)
+	if name, ok := requestParams["name"].(string); ok && name != "" {
+		req.Header.Set("MCP-Name", name)
+	}
 	if server.AuthHeader != "" && server.AuthEnvVar != "" {
 		req.Header.Set(server.AuthHeader, os.Getenv(server.AuthEnvVar))
 	}
@@ -205,7 +250,13 @@ func (c *HTTPClient) do(ctx context.Context, server ServerRef, cc CallContext, m
 		return nil, fmt.Errorf("MCP request to %s: %w", server.Name, err)
 	}
 	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read MCP response from %s: %w", server.Name, err)
+	}
+	if len(respBody) > maxResponseBytes {
+		return nil, fmt.Errorf("MCP response too large from %s", server.Name)
+	}
 	if resp.StatusCode/100 != 2 {
 		return nil, fmt.Errorf("MCP HTTP %d from %s: %s", resp.StatusCode, server.Name, string(respBody))
 	}

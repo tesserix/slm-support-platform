@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def register(mcp, cfg: Config) -> None:
-    """Register the cross-tenant tools on the FastMCP instance."""
+    """Register the cross-tenant tools on the MCP tool registry."""
 
     @mcp.tool(
         name="search_knowledge_base",

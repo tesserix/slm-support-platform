@@ -1,10 +1,10 @@
 """Runtime config for mcp-gateway."""
+
 from __future__ import annotations
 
 import dataclasses
 import os
 import sys
-
 
 # Every supported tenant slug — must match the slm-router tenant ids
 # and the @tesserix/otto-widget tenantId passed from each product
@@ -104,11 +104,20 @@ def load() -> Config:
         )
         sys.exit(2)
 
+    auth_key = os.environ.get("MCP_AUTH_KEY") or None
+    allow_insecure = os.environ.get("MCP_ALLOW_INSECURE_NO_AUTH", "").lower() == "true"
+    if auth_key is None and not allow_insecure:
+        print(
+            "MCP_AUTH_KEY is required; set MCP_ALLOW_INSECURE_NO_AUTH=true only for local development",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     return Config(
         tenant=tenant,
         bind_host=os.environ.get("MCP_HOST", "0.0.0.0"),
         bind_port=int(os.environ.get("MCP_PORT", "8765")),
-        auth_key=os.environ.get("MCP_AUTH_KEY") or None,
+        auth_key=auth_key,
         vector_db_dsn=os.environ.get("VECTOR_DB_DSN") or None,
         embedder_url=(os.environ.get("EMBEDDER_URL") or "").rstrip("/") or None,
         mongo_url=os.environ.get("MONGO_URL") or None,

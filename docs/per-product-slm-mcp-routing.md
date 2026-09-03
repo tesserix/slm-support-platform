@@ -149,11 +149,10 @@ behave the same as any other reason — only the intake gates relax.
   Currently live: mark8ly, fanzone, homechef, gameverse, stockpilot,
   horoscope — image pinned to `main-f8789c4` because GAR pull-through
   caches by digest, so a floating `main` tag silently goes stale.
-- **JSON-RPC 2.0 over plain POST at `/mcp`.** The slm-router doesn't
-  speak FastMCP streamable HTTP (session ids, SSE, 307 redirects), so
-  the mcp-gateway exposes a plain JSON-RPC handler that implements
-  `initialize`, `tools/list`, and `tools/call`. FastMCP streamable can
-  be mounted later at `/streamable` for a more capable client.
+- **Stateless MCP `2026-07-28` over POST at `/mcp`.** The slm-router uses
+  `server/discover` and sends independently complete `tools/list` and
+  `tools/call` requests with matching protocol, method, capability, client,
+  and tool-name metadata. Session IDs and GET event streams are rejected.
 - **Cross-namespace NetworkPolicy.** `support-platform` is whitelisted
   in each product namespace's `allow-<product>-ingress` policy (see
   `tesserix-k8s/charts/thirdparty/istio-config/templates/network-policies.yaml`).
