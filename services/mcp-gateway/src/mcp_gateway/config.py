@@ -38,6 +38,9 @@ class Config:
     # Mutating tools stay unregistered unless MCP_ALLOW_MUTATIONS opts in.
     allow_mutations: bool
     kora_api_url: str
+    # Shared key for kora-api /internal/v1 routes (X-Internal-Key). Unset
+    # falls back to the Firebase-guarded /v1/foods, which 401s for services.
+    kora_internal_key: str | None
     # Bearer token clients send via X-MCP-Key. None disables auth (dev only).
     auth_key: str | None
     # Pgvector DSN used by the shared search_knowledge_base tool. Optional;
@@ -144,6 +147,7 @@ def load() -> Config:
         kora_api_url=os.environ.get(
             "KORA_API_URL", "http://kora-api.kora.svc.cluster.local:8080"
         ).rstrip("/"),
+        kora_internal_key=os.environ.get("KORA_INTERNAL_KEY") or None,
         vector_db_dsn=os.environ.get("VECTOR_DB_DSN") or None,
         embedder_url=(os.environ.get("EMBEDDER_URL") or "").rstrip("/") or None,
         mongo_url=os.environ.get("MONGO_URL") or None,
