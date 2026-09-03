@@ -9,9 +9,20 @@ import httpx
 import pytest
 
 from mcp_gateway.config import load
-from mcp_gateway.server import build_runtime
+from mcp_gateway.server import ToolRegistry, build_runtime
 
 PROTOCOL_VERSION = "2026-07-28"
+
+
+def test_protocol_descriptor_normalizes_multiline_openapi_description() -> None:
+    registry = ToolRegistry()
+
+    @registry.tool(name="example", description="First line.\nSecond   line.")
+    async def example() -> dict[str, str]:
+        return {"status": "ok"}
+
+    descriptor = registry.protocol_tools()[0]
+    assert descriptor.description == "First line. Second line."
 
 
 class LifespanListener:
