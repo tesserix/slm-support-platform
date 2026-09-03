@@ -119,9 +119,12 @@ def load() -> Config:
     bind_port = int(os.environ.get("MCP_PORT", "8765"))
     namespace = "support-platform" if tenant == "platform" else tenant
     service = f"{tenant}-mcp"
+    service_fqdn = f"{service}.{namespace}.svc.cluster.local"
     default_hosts = (
+        service,
         f"{service}:{bind_port}",
-        f"{service}.{namespace}.svc.cluster.local:{bind_port}",
+        service_fqdn,
+        f"{service_fqdn}:{bind_port}",
     )
 
     return Config(
