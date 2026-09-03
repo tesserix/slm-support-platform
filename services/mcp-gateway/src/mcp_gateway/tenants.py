@@ -102,6 +102,7 @@ def register(mcp, cfg: Config) -> None:
         "horoscope": _register_horoscope,
         "scrapper": _register_scrapper,
         "platform": _register_platform,
+        "kora": _register_kora,
     }[cfg.tenant](mcp, cfg)
 
 
@@ -1028,6 +1029,31 @@ def _register_scrapper(mcp, cfg: Config) -> None:
             cfg.scrapper_api_url,
             "/api/accounts",
             source="scrapper-api",
+        )
+
+
+# ---------------------------------------------------------------------------
+# kora — read-only nutrition lookup
+# ---------------------------------------------------------------------------
+def _register_kora(mcp, cfg: Config) -> None:
+    @mcp.tool(
+        name="search_nutrition",
+        description=(
+            "Search Kora's reviewed nutrition database. Returns matching foods "
+            "and their sourced nutrition values. Read-only; never logs food, "
+            "changes a profile, or writes user data."
+        ),
+    )
+    async def search_nutrition(query: str, limit: int = 10) -> dict[str, Any]:
+        query = query.strip()
+        if len(query) < 2:
+            return {"error": "invalid_input", "message": "query must be at least 2 characters"}
+        limit = max(1, min(limit, 25))
+        return await _get_json(
+            cfg.kora_api_url,
+            "/v1/foods",
+            source="kora-nutrition",
+            params={"q": query, "limit": limit},
         )
 
 

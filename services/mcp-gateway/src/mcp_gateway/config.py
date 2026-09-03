@@ -22,6 +22,7 @@ SUPPORTED_TENANTS: frozenset[str] = frozenset(
         # chats to the "platform" tenant — the MCP for it serves company
         # info + contact-lead capture rather than per-store order data.
         "platform",
+        "kora",
     }
 )
 
@@ -76,6 +77,7 @@ class Config:
     fanzone_prediction_url: str
     mark8ly_orders_url: str
     homechef_api_url: str
+    kora_api_url: str
     stockpilot_api_url: str
     gameverse_server_url: str
     horoscope_api_url: str
@@ -144,6 +146,9 @@ def load() -> Config:
         homechef_api_url=os.environ.get(
             "HOMECHEF_API_URL",
             "http://homechef-api.homechef.svc.cluster.local",
+        ).rstrip("/"),
+        kora_api_url=os.environ.get(
+            "KORA_API_URL", "http://kora-api.kora.svc.cluster.local"
         ).rstrip("/"),
         stockpilot_api_url=os.environ.get(
             "STOCKPILOT_API_URL",
