@@ -81,13 +81,24 @@ class ToolRegistry:
     def protocol_tools(self) -> tuple[ProtocolToolDescriptor, ...]:
         descriptors: list[ProtocolToolDescriptor] = []
         for tool in self.list_tools():
+            description = " ".join(str(tool["description"]).split()) or f"Invoke {tool['name']}."
+            description = description[:4096].rstrip()
             fingerprint = hashlib.sha256(
-                json.dumps(tool, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+                json.dumps(
+                    {
+                        "name": tool["name"],
+                        "description": description,
+                        "inputSchema": tool["inputSchema"],
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ).encode()
             ).hexdigest()
             descriptors.append(
                 ProtocolToolDescriptor(
                     name=tool["name"],
-                    description=tool["description"] or f"Invoke {tool['name']}.",
+                    description=description,
                     input_schema=tool["inputSchema"],
                     output_schema=None,
                     fingerprint=f"sha256:{fingerprint}",
