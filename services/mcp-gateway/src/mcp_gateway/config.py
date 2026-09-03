@@ -1,10 +1,10 @@
 """Runtime config for mcp-gateway."""
-
 from __future__ import annotations
 
 import dataclasses
 import os
 import sys
+
 
 # Every supported tenant slug — must match the slm-router tenant ids
 # and the @tesserix/otto-widget tenantId passed from each product
@@ -31,11 +31,11 @@ class Config:
     tenant: str
     bind_host: str
     bind_port: int
-    # DNS rebinding and browser-origin allowlists enforced by the runtime.
-    allowed_hosts: tuple[str, ...]
-    allowed_origins: tuple[str, ...]
     # Bearer token clients send via X-MCP-Key. None disables auth (dev only).
     auth_key: str | None
+    # Mutating tools are disabled by default. Production MCP surfaces are
+    # read-only unless explicitly opted in for a separately controlled use.
+    allow_mutations: bool
     # Pgvector DSN used by the shared search_knowledge_base tool. Optional;
     # the tool returns "unavailable" if unset.
     vector_db_dsn: str | None
@@ -107,34 +107,13 @@ def load() -> Config:
         )
         sys.exit(2)
 
-    auth_key = os.environ.get("MCP_AUTH_KEY") or None
-    allow_insecure = os.environ.get("MCP_ALLOW_INSECURE_NO_AUTH", "").lower() == "true"
-    if auth_key is None and not allow_insecure:
-        print(
-            "MCP_AUTH_KEY is required; set MCP_ALLOW_INSECURE_NO_AUTH=true only for local development",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    bind_port = int(os.environ.get("MCP_PORT", "8765"))
-    namespace = "support-platform" if tenant == "platform" else tenant
-    service = f"{tenant}-mcp"
-    service_fqdn = f"{service}.{namespace}.svc.cluster.local"
-    default_hosts = (
-        service,
-        f"{service}:{bind_port}",
-        service_fqdn,
-        f"{service_fqdn}:{bind_port}",
-    )
-
     return Config(
         tenant=tenant,
         bind_host=os.environ.get("MCP_HOST", "0.0.0.0"),
-        bind_port=bind_port,
-        allowed_hosts=_split_csv(os.environ.get("MCP_ALLOWED_HOSTS", "")) or default_hosts,
-        allowed_origins=_split_csv(os.environ.get("MCP_ALLOWED_ORIGINS", ""))
-        or ("http://slm-router.support-platform.svc.cluster.local",),
-        auth_key=auth_key,
+        bind_port=int(os.environ.get("MCP_PORT", "8765")),
+        auth_key=os.environ.get("MCP_AUTH_KEY") or None,
+        allow_mutations=os.environ.get("MCP_ALLOW_MUTATIONS", "false").strip().lower()
+        in {"1", "true", "yes", "on"},
         vector_db_dsn=os.environ.get("VECTOR_DB_DSN") or None,
         embedder_url=(os.environ.get("EMBEDDER_URL") or "").rstrip("/") or None,
         mongo_url=os.environ.get("MONGO_URL") or None,

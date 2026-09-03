@@ -390,6 +390,7 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
 
     @mcp.tool(
         name="create_refund_request",
+        mutating=True,
         description=(
             "File a return/refund REQUEST for an order. This does NOT issue a "
             "refund — it creates a return in 'requested' state that the store "
@@ -454,6 +455,7 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
 
     @mcp.tool(
         name="create_support_ticket",
+        mutating=True,
         description=(
             "Open a TRACKED support ticket for THIS conversation when the issue "
             "needs human follow-up or a durable record (you can't fully resolve it "
@@ -747,6 +749,7 @@ def _register_homechef(mcp, cfg: Config) -> None:
 
     @mcp.tool(
         name="create_refund_request",
+        mutating=True,
         description=(
             "File a refund/issue REQUEST for a HomeChef order. This does NOT "
             "issue a refund — it raises an order issue that the chef/admin must "
@@ -1040,6 +1043,7 @@ def _register_scrapper(mcp, cfg: Config) -> None:
 def _register_platform(mcp, cfg: Config) -> None:
     @mcp.tool(
         name="submit_contact_lead",
+        mutating=True,
         description=(
             "Capture a sales/contact lead from a tesserix.app visitor when they "
             "ask to be contacted, request a demo, or want pricing follow-up. "
