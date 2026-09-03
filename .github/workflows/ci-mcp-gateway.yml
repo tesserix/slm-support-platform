@@ -59,7 +59,8 @@ jobs:
           images: ghcr.io/tesserix/slm-support-platform/mcp-gateway
           tags: |
             type=ref,event=branch
-            type=sha,prefix={{branch}}-,format=short
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-,format=short,enable=${{ github.event_name != 'pull_request' }}
 
       - name: Build & push
         uses: docker/build-push-action@v6
