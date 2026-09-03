@@ -1,1 +1,1 @@
-"""mcp-gateway — single FastMCP server with per-tenant tool sets."""
+"""mcp-gateway — stateless MCP 2026-07-28 with per-tenant tool sets."""

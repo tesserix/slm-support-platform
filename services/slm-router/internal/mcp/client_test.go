@@ -5,17 +5,26 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestHTTPClientListTools(t *testing.T) {
+	var methods []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
-		if req.Method != "tools/list" {
-			t.Fatalf("method: got %s want tools/list", req.Method)
+		methods = append(methods, req.Method)
+		assertModernRequest(t, r, req, "")
+		var result json.RawMessage
+		switch req.Method {
+		case "server/discover":
+			result = json.RawMessage(`{"supportedVersions":["2026-07-28"],"capabilities":{"tools":{}}}`)
+		case "tools/list":
+			result = json.RawMessage(`{"tools":[{"name":"lookup_order","description":"...","inputSchema":{}}]}`)
+		default:
+			t.Fatalf("unexpected method: %s", req.Method)
 		}
-		result := json.RawMessage(`{"tools":[{"name":"lookup_order","description":"...","inputSchema":{}}]}`)
 		_ = json.NewEncoder(w).Encode(rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result})
 	}))
 	defer srv.Close()
@@ -27,6 +36,41 @@ func TestHTTPClientListTools(t *testing.T) {
 	}
 	if len(tools) != 1 || tools[0].Name != "lookup_order" {
 		t.Fatalf("tools: got %+v", tools)
+	}
+	if got, want := len(methods), 2; got != want || methods[0] != "server/discover" || methods[1] != "tools/list" {
+		t.Fatalf("methods: got %v want [server/discover tools/list]", methods)
+	}
+}
+
+func TestHTTPClientRejectsOversizedResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":"` + strings.Repeat("x", (1<<20)+1) + `"}`))
+	}))
+	defer srv.Close()
+
+	_, err := NewHTTP().Call(context.Background(), ServerRef{Name: "x", URL: srv.URL}, CallContext{}, "tool", nil)
+	if err == nil || !strings.Contains(err.Error(), "response too large") {
+		t.Fatalf("error: got %v want response too large", err)
+	}
+}
+
+func assertModernRequest(t *testing.T, r *http.Request, req rpcRequest, name string) {
+	t.Helper()
+	if got := r.Header.Get("MCP-Protocol-Version"); got != "2026-07-28" {
+		t.Fatalf("protocol header: got %q", got)
+	}
+	if got := r.Header.Get("MCP-Method"); got != req.Method {
+		t.Fatalf("method header: got %q want %q", got, req.Method)
+	}
+	if got := r.Header.Get("MCP-Name"); got != name {
+		t.Fatalf("name header: got %q want %q", got, name)
+	}
+	meta, ok := req.Params["_meta"].(map[string]any)
+	if !ok || meta["io.modelcontextprotocol/protocolVersion"] != "2026-07-28" {
+		t.Fatalf("protocol metadata: got %#v", req.Params["_meta"])
+	}
+	if _, ok := meta["io.modelcontextprotocol/clientCapabilities"].(map[string]any); !ok {
+		t.Fatalf("client capabilities: got %#v", meta["io.modelcontextprotocol/clientCapabilities"])
 	}
 }
 
@@ -59,6 +103,7 @@ func TestHTTPClientCallToolSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req rpcRequest
 		_ = json.NewDecoder(r.Body).Decode(&req)
+		assertModernRequest(t, r, req, "lookup_order")
 		result := json.RawMessage(`{"content":[{"type":"text","text":"order #123 is delivered"}],"isError":false}`)
 		_ = json.NewEncoder(w).Encode(rpcResponse{JSONRPC: "2.0", ID: req.ID, Result: result})
 	}))

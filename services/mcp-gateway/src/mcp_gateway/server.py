@@ -1,29 +1,15 @@
-"""mcp-gateway HTTP server.
+"""Stateless MCP 2026-07-28 server for per-product support tools."""
 
-Two transport layers in one app:
-
-1. Plain JSON-RPC 2.0 over HTTP POST at ``/mcp``. This is the
-   transport the slm-router's MCP client currently speaks (single
-   POST per call, ``Accept: application/json``). We implement it
-   directly instead of going through FastMCP's streamable HTTP
-   transport so the router doesn't need to know about session ids,
-   SSE, or 307 redirects.
-
-2. (Future) FastMCP's streamable HTTP app mounted at ``/streamable``
-   for when the router moves to a more capable MCP client.
-
-Tools are defined once in ``tenants.py`` / ``shared_tools.py`` and
-registered into a tiny ``ToolRegistry``; both transports share the
-same registry so behaviour stays consistent.
-"""
 from __future__ import annotations
 
 import contextvars
+import hmac
 import inspect
 import json
 import logging
 import re
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -31,10 +17,13 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from .config import Config, load
 from . import auto_tools, shared_tools, tenants
+from .config import Config, load
 
 logger = logging.getLogger(__name__)
+
+_PROTOCOL_VERSION = "2026-07-28"
+_MAX_REQUEST_BYTES = 1 << 20
 
 # Trusted conversation/customer context, forwarded by slm-router as HTTP
 # headers on every MCP request (set ONLY after the X-MCP-Key shared secret
@@ -53,8 +42,8 @@ _TRUSTED_HEADERS: dict[str, str] = {
 }
 
 # Per-request trusted context. Default empty; set per JSON-RPC request.
-request_ctx: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
-    "mcp_request_ctx", default={}
+request_ctx: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "mcp_request_ctx", default=None
 )
 
 
@@ -62,14 +51,16 @@ request_ctx: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
 # Tool registry — what every transport shares.
 # ---------------------------------------------------------------------------
 class ToolRegistry:
-    """A trivial replacement for FastMCP's tool registration that emits
+    """A small tool registry that emits
     JSON-RPC-shaped responses on demand. Tools are async callables.
     """
 
     def __init__(self) -> None:
         self._tools: dict[str, dict[str, Any]] = {}
 
-    def tool(self, *, name: str, description: str = "") -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    def tool(
+        self, *, name: str, description: str = ""
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         def decorator(fn: Callable[..., Any]) -> Callable[..., Any]:
             self._tools[name] = {
                 "fn": fn,
@@ -157,52 +148,82 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if self._key is None:
             return await call_next(request)
         provided = request.headers.get("X-MCP-Key")
-        if provided != self._key:
+        if provided is None or not hmac.compare_digest(provided, self._key):
             return JSONResponse({"error": "unauthorized"}, status_code=401)
         return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
-# JSON-RPC handler — implements just the methods slm-router needs.
+# JSON-RPC handler — every request is independently complete.
 # ---------------------------------------------------------------------------
-async def _jsonrpc_handler(request: Request) -> Response:
-    """Plain JSON-RPC 2.0 over a single POST. Methods:
+def _rpc_error(rpc_id: Any, code: int, message: str, status_code: int) -> JSONResponse:
+    return JSONResponse(
+        {"jsonrpc": "2.0", "id": rpc_id, "error": {"code": code, "message": message}},
+        status_code=status_code,
+    )
 
-    - initialize       (returns serverInfo + capabilities)
-    - tools/list       (returns the registered tools)
-    - tools/call       (invokes a tool and returns its result)
-    """
-    if request.method != "POST":
-        return JSONResponse(
-            {"jsonrpc": "2.0", "error": {"code": -32600, "message": "POST only"}, "id": None},
-            status_code=405,
-        )
+
+async def _jsonrpc_handler(request: Request) -> Response:
+    """Serve discovery and tool calls without sessions or connection affinity."""
+    if request.headers.get("Mcp-Session-Id"):
+        return _rpc_error(None, -32600, "invalid session", 404)
+
+    content_length = request.headers.get("Content-Length")
+    if content_length and content_length.isdigit() and int(content_length) > _MAX_REQUEST_BYTES:
+        return _rpc_error(None, -32600, "request too large", 413)
+
     try:
-        body = await request.json()
-    except Exception:
-        return JSONResponse(
-            {"jsonrpc": "2.0", "error": {"code": -32700, "message": "parse error"}, "id": None}
-        )
+        raw_body = await request.body()
+        if len(raw_body) > _MAX_REQUEST_BYTES:
+            return _rpc_error(None, -32600, "request too large", 413)
+        body = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return _rpc_error(None, -32700, "parse error", 400)
+
+    if not isinstance(body, dict):
+        return _rpc_error(None, -32600, "invalid request", 400)
 
     rpc_id = body.get("id")
     method = body.get("method")
     params = body.get("params") or {}
+    if not isinstance(method, str) or not isinstance(params, dict):
+        return _rpc_error(rpc_id, -32600, "invalid request", 400)
 
-    # Capture the trusted conversation/customer context for this request.
-    # Safe to trust: BearerAuthMiddleware already validated X-MCP-Key before
-    # this handler ran. Only non-empty headers are kept (absent == unknown).
-    # Header-supplied identity is authoritative over anything in tool args.
+    header_version = request.headers.get("MCP-Protocol-Version", "")
+    if header_version != _PROTOCOL_VERSION:
+        return _rpc_error(rpc_id, -32022, f"unsupported protocol version: {header_version}", 400)
+
+    if request.headers.get("MCP-Method", "") != method:
+        return _rpc_error(rpc_id, -32020, "MCP-Method does not match JSON-RPC method", 400)
+
+    metadata = params.get("_meta")
+    if not isinstance(metadata, dict):
+        return _rpc_error(rpc_id, -32602, "missing request metadata", 400)
+    if metadata.get("io.modelcontextprotocol/protocolVersion") != header_version:
+        return _rpc_error(rpc_id, -32020, "protocol metadata does not match header", 400)
+    if not isinstance(metadata.get("io.modelcontextprotocol/clientCapabilities"), dict):
+        return _rpc_error(rpc_id, -32602, "missing client capabilities", 400)
+
+    if method == "tools/call" and request.headers.get("MCP-Name", "") != params.get("name"):
+        return _rpc_error(rpc_id, -32020, "MCP-Name does not match tool name", 400)
+
+    cfg: Config = request.app.state.cfg
+    if method == "tools/call" and request.headers.get("X-Tenant-Id", "") != cfg.tenant:
+        return _rpc_error(rpc_id, -32001, "tenant context does not match MCP server", 403)
+
     request_ctx.set(
-        {field: request.headers[h] for h, field in _TRUSTED_HEADERS.items() if request.headers.get(h)}
+        {
+            field: request.headers[h]
+            for h, field in _TRUSTED_HEADERS.items()
+            if request.headers.get(h)
+        }
     )
-
     registry: ToolRegistry = request.app.state.registry
 
     try:
-        if method == "initialize":
-            cfg: Config = request.app.state.cfg
+        if method == "server/discover":
             result = {
-                "protocolVersion": "2024-11-05",
+                "supportedVersions": [_PROTOCOL_VERSION],
                 "serverInfo": {"name": f"{cfg.tenant}-mcp", "version": "0.1.0"},
                 "capabilities": {"tools": {}},
             }
@@ -212,39 +233,17 @@ async def _jsonrpc_handler(request: Request) -> Response:
             try:
                 output = await registry.call(params.get("name", ""), params.get("arguments") or {})
             except KeyError:
-                return JSONResponse(
-                    {
-                        "jsonrpc": "2.0",
-                        "id": rpc_id,
-                        "error": {"code": -32601, "message": f"unknown tool: {params.get('name')}"},
-                    }
-                )
-            # MCP tools/call response carries `content` (list of typed
-            # payloads). slm-router accepts the structured payload too;
-            # we put the dict result under both for compatibility.
+                return _rpc_error(rpc_id, -32601, f"unknown tool: {params.get('name')}", 200)
             result = {
                 "content": [{"type": "text", "text": json.dumps(output)}],
                 "structuredContent": output,
                 "isError": False,
             }
         else:
-            return JSONResponse(
-                {
-                    "jsonrpc": "2.0",
-                    "id": rpc_id,
-                    "error": {"code": -32601, "message": f"unknown method: {method}"},
-                }
-            )
+            return _rpc_error(rpc_id, -32601, f"unknown method: {method}", 404)
     except Exception as exc:  # pragma: no cover - defensive
         logger.exception("jsonrpc handler failed")
-        return JSONResponse(
-            {
-                "jsonrpc": "2.0",
-                "id": rpc_id,
-                "error": {"code": -32603, "message": f"internal error: {exc}"},
-            },
-            status_code=500,
-        )
+        return _rpc_error(rpc_id, -32603, f"internal error: {exc}", 500)
 
     return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "result": result})
 
@@ -254,10 +253,7 @@ async def _jsonrpc_handler(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 def build_registry(cfg: Config) -> ToolRegistry:
     reg = ToolRegistry()
-    # shared_tools + tenants currently call mcp.tool(name=...,
-    # description=...) on a FastMCP instance. The ToolRegistry above
-    # exposes the same decorator surface, so both modules register
-    # against it unchanged.
+    # shared_tools + tenants register against this decorator surface.
     shared_tools.register(reg, cfg)
     tenants.register(reg, cfg)
     # Auto-registered tools come LAST so a freshly-tagged OpenAPI op
@@ -269,9 +265,7 @@ def build_registry(cfg: Config) -> ToolRegistry:
     # loop is already running (newer uvicorn does this).
     auto_count = auto_tools.register(reg, cfg)
     if auto_count:
-        logger.info(
-            "auto-registered %d openapi tool(s) for tenant=%s", auto_count, cfg.tenant
-        )
+        logger.info("auto-registered %d openapi tool(s) for tenant=%s", auto_count, cfg.tenant)
     return reg
 
 
@@ -284,9 +278,12 @@ def build_app() -> Starlette:
     logger.info("starting mcp-gateway tenant=%s port=%s", cfg.tenant, cfg.bind_port)
 
     registry = build_registry(cfg)
-    logger.info("registered %d tools for tenant=%s: %s",
-                len(registry.list_tools()), cfg.tenant,
-                [t["name"] for t in registry.list_tools()])
+    logger.info(
+        "registered %d tools for tenant=%s: %s",
+        len(registry.list_tools()),
+        cfg.tenant,
+        [t["name"] for t in registry.list_tools()],
+    )
 
     async def healthz(_request: Request) -> Response:
         return JSONResponse({"ok": True, "tenant": cfg.tenant})

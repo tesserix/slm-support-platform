@@ -31,9 +31,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: type-check (best effort, skipped if no deps installed)
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Test MCP gateway
         run: |
-          python3 -m py_compile services/mcp-gateway/src/mcp_gateway/*.py
+          python -m pip install './services/mcp-gateway[dev]'
+          python -m pytest services/mcp-gateway/tests
+          python -m py_compile services/mcp-gateway/src/mcp_gateway/*.py
 
       - name: Docker buildx
         uses: docker/setup-buildx-action@v3
