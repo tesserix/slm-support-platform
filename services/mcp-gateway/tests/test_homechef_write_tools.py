@@ -22,7 +22,7 @@ async def test_homechef_refund_request_is_customer_scoped_and_body_signed() -> N
         homechef_api_url="https://homechef.test",
         homechef_bff_hmac_key=base64.b64encode(key).decode(),
     )
-    registry = ToolRegistry()
+    registry = ToolRegistry(allow_mutations=True)
     tenants.register(registry, cfg)
     route = respx.post("https://homechef.test/api/v1/orders/order-1/report-issue").mock(
         return_value=httpx.Response(201, json={"id": "issue-1"})
@@ -56,7 +56,7 @@ async def test_homechef_refund_request_is_customer_scoped_and_body_signed() -> N
 
 async def test_homechef_refund_request_fails_closed_without_verified_identity() -> None:
     cfg = dataclasses.replace(load(), tenant="homechef", homechef_bff_hmac_key=None)
-    registry = ToolRegistry()
+    registry = ToolRegistry(allow_mutations=True)
     tenants.register(registry, cfg)
     request_ctx.set({})
 

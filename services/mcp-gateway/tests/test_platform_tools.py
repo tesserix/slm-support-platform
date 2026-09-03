@@ -13,7 +13,7 @@ from mcp_gateway.server import ToolRegistry
 @respx.mock
 async def test_contact_lead_matches_tesserix_home_contract() -> None:
     cfg = dataclasses.replace(load(), tenant="platform", tesserix_home_url="https://platform.test")
-    registry = ToolRegistry()
+    registry = ToolRegistry(allow_mutations=True)
     tenants.register(registry, cfg)
     route = respx.post("https://platform.test/api/contact").mock(
         return_value=httpx.Response(200, json={"success": True})
