@@ -1,11 +1,4 @@
-"""Pytest fixtures + module-level setup.
-
-The mcp-gateway's `server.py` builds the Starlette app at import time
-so `uvicorn mcp_gateway.server:app` works without a factory call. That
-in turn calls `config.load()` which `sys.exit(2)`s when `MCP_TENANT`
-isn't set. Pin a tenant before any test module imports anything so
-collection doesn't blow up.
-"""
+"""Environment defaults shared by the gateway tests."""
 
 from __future__ import annotations
 

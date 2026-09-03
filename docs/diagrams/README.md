@@ -8,7 +8,7 @@ Two architecture diagrams in `.drawio` format. They open in **diagrams.net** (fr
 |------|---------------|
 | [`architecture.drawio`](architecture.drawio) | System architecture: all five products → chat widgets → edge → support platform (BFF, Router, Orchestrator, MCP, RAG, SLM) → per-product MCP servers → product APIs |
 | [`customer-flow.drawio`](customer-flow.drawio) | Customer request flow: swim-lane view of one chat message travelling through every component, end to end |
-| `end-state.md` | Mermaid version of the architecture, embedded in markdown for inline reading |
+| `end-state.md` | Source-of-truth Mermaid architecture, including Customer AI Registry and the stateless Tesserix MCP Runtime |
 | `transformer-block.md` | Mermaid diagrams of the Phase 1 transformer block (model architecture, not platform) |
 
 ## How to open

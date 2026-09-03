@@ -1,8 +1,8 @@
 # mcp-gateway
 
 A single stateless MCP server image that serves the Otto MCP endpoint for any
-Tesserix product. Tools are tenant-scoped: the `MCP_TENANT` env var
-selects which tool group is exposed.
+Tesserix product. It hosts the product tool registry on the published
+Tesserix MCP Runtime `v0.1.0-rc.6`; `MCP_TENANT` selects the tool group.
 
 Replaces the per-product nginx stub in `tesserix-k8s/charts/apps/mcp-stub/`.
 Same per-product hostname (e.g. `fanzone-mcp.fanzone.svc.cluster.local:8765`),
@@ -36,17 +36,17 @@ the explicit local-only `MCP_ALLOW_INSECURE_NO_AUTH=true` override. Each
 trusted request headers, never from model-supplied arguments, and delegate
 deduplication to the owning product backend.
 
+The runtime rejects session IDs, authenticates before parsing JSON-RPC,
+enforces bounded headers/bodies/responses, exposes `/startupz`, `/livez`,
+`/readyz`, and `/metrics`, and applies explicit DNS host and browser-origin
+allowlists. `MCP_ALLOWED_HOSTS` and `MCP_ALLOWED_ORIGINS` accept comma-separated
+overrides; production-safe service DNS defaults are derived from `MCP_TENANT`.
+
 ## Tool implementation status
 
-The first iteration of every product-specific tool returns a
-**realistic stub response** with the same JSON shape a real backend
-would return, plus an explicit `"_stub": true` flag so the AI knows
-to caveat its answer. Product teams replace the stub bodies with real
-HTTP calls when the upstream APIs are stable.
-
-This is intentional: a stub-shaped response is much more useful to the
-LLM than no tool at all — the model learns the tool exists, the shape
-of its response, and how to weave the answer into a reply.
+Product tools call their owning in-cluster APIs where those contracts exist.
+Unavailable backend capabilities return an explicit `not_implemented` result;
+they never manufacture representative customer data.
 
 ## Run
 

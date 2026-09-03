@@ -146,13 +146,18 @@ behave the same as any other reason — only the intake gates relax.
 - **One MCP per product namespace.** Same `mcp-gateway` image is
   deployed into each product namespace; `MCP_TENANT` selects the tool
   set. Service DNS is `<tenant>-mcp.<tenant>.svc.cluster.local:8765`.
-  Currently live: mark8ly, fanzone, homechef, gameverse, stockpilot,
-  horoscope — image pinned to `main-f8789c4` because GAR pull-through
-  caches by digest, so a floating `main` tag silently goes stale.
+  Currently active: mark8ly, homechef, stockpilot, and platform. Fanzone is
+  decommissioned; Gameverse and Horoscope have aligned manifests but are not
+  registered for production activation.
 - **Stateless MCP `2026-07-28` over POST at `/mcp`.** The slm-router uses
   `server/discover` and sends independently complete `tools/list` and
   `tools/call` requests with matching protocol, method, capability, client,
   and tool-name metadata. Session IDs and GET event streams are rejected.
+- **Tesserix MCP Runtime host.** The shared product image pins the immutable
+  `v0.1.0-rc.6` release wheel by SHA-256. The runtime owns protocol parsing,
+  auth-before-parse context creation, DNS/origin protection, request limits,
+  stateless lifecycle, health, and metrics. Product code supplies only the
+  tenant-scoped tool catalog and backend handlers.
 - **Cross-namespace NetworkPolicy.** `support-platform` is whitelisted
   in each product namespace's `allow-<product>-ingress` policy (see
   `tesserix-k8s/charts/thirdparty/istio-config/templates/network-policies.yaml`).
@@ -172,9 +177,9 @@ behave the same as any other reason — only the intake gates relax.
 
 ### Still to build
 
-- **Real MCP tool implementations.** Current tools return stub JSON
-  with `"_stub": true`; each needs to call the matching product's
-  backend (order-service, match-service, portfolio-service, etc.).
+- **Remaining backend contracts.** Existing product API contracts are wired;
+  capabilities whose owning backend route does not exist return an explicit
+  `not_implemented` result until that product exposes the route.
 - **Per-tenant LoRA fine-tunes.** Shared qwen2.5-1.5b base + per-tenant
   4-bit QLoRA adapter; needs ≥1k resolved conversations + GPU time.
   Until then every tenant runs on the shared base model + per-tenant

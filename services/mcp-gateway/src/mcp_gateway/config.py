@@ -31,6 +31,9 @@ class Config:
     tenant: str
     bind_host: str
     bind_port: int
+    # DNS rebinding and browser-origin allowlists enforced by the runtime.
+    allowed_hosts: tuple[str, ...]
+    allowed_origins: tuple[str, ...]
     # Bearer token clients send via X-MCP-Key. None disables auth (dev only).
     auth_key: str | None
     # Pgvector DSN used by the shared search_knowledge_base tool. Optional;
@@ -113,10 +116,21 @@ def load() -> Config:
         )
         sys.exit(2)
 
+    bind_port = int(os.environ.get("MCP_PORT", "8765"))
+    namespace = "support-platform" if tenant == "platform" else tenant
+    service = f"{tenant}-mcp"
+    default_hosts = (
+        f"{service}:{bind_port}",
+        f"{service}.{namespace}.svc.cluster.local:{bind_port}",
+    )
+
     return Config(
         tenant=tenant,
         bind_host=os.environ.get("MCP_HOST", "0.0.0.0"),
-        bind_port=int(os.environ.get("MCP_PORT", "8765")),
+        bind_port=bind_port,
+        allowed_hosts=_split_csv(os.environ.get("MCP_ALLOWED_HOSTS", "")) or default_hosts,
+        allowed_origins=_split_csv(os.environ.get("MCP_ALLOWED_ORIGINS", ""))
+        or ("http://slm-router.support-platform.svc.cluster.local",),
         auth_key=auth_key,
         vector_db_dsn=os.environ.get("VECTOR_DB_DSN") or None,
         embedder_url=(os.environ.get("EMBEDDER_URL") or "").rstrip("/") or None,

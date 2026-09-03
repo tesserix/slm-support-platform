@@ -1,19 +1,30 @@
-"""`python -m mcp_gateway` entrypoint — uvicorn run wrapper."""
+"""Run the Tesserix stateless MCP transport until termination."""
+
 from __future__ import annotations
 
-import os
+import asyncio
+import signal
 
-import uvicorn
+from .server import build_runtime
+
+
+async def serve() -> None:
+    runtime = build_runtime()
+    stopping = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for received_signal in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(received_signal, stopping.set)
+
+    await runtime.start()
+    try:
+        await stopping.wait()
+    finally:
+        await runtime.drain()
+        await runtime.stop()
 
 
 def main() -> None:
-    uvicorn.run(
-        "mcp_gateway.server:app",
-        host=os.environ.get("MCP_HOST", "0.0.0.0"),
-        port=int(os.environ.get("MCP_PORT", "8765")),
-        log_level=os.environ.get("MCP_LOG_LEVEL", "info").lower(),
-        access_log=True,
-    )
+    asyncio.run(serve())
 
 
 if __name__ == "__main__":
