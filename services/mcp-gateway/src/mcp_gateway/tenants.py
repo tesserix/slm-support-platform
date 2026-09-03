@@ -1049,6 +1049,14 @@ def _register_kora(mcp, cfg: Config) -> None:
         if len(query) < 2:
             return {"error": "invalid_input", "message": "query must be at least 2 characters"}
         limit = max(1, min(limit, 25))
+        if cfg.kora_internal_key:
+            return await _get_json(
+                cfg.kora_api_url,
+                "/internal/v1/foods",
+                source="kora-nutrition",
+                params={"q": query, "limit": limit},
+                headers={"X-Internal-Key": cfg.kora_internal_key},
+            )
         return await _get_json(
             cfg.kora_api_url,
             "/v1/foods",
