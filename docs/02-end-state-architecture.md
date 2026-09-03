@@ -33,10 +33,12 @@ graph TB
     subgraph GKE
         BFF[support-bff]
         ROUTER[Router agent]
+        REG[Customer AI Registry]
         RAG[RAG retriever]
         VDB[Vector DB]
         SLM[SLM inference]
-        TOOLS[Tool layer]
+        RUNTIME[Tesserix MCP Runtime<br/>stateless 2026-07-28]
+        TOOLS[Per-product tool catalogs]
     end
 
     subgraph ProductAPIs
@@ -55,8 +57,12 @@ graph TB
     ROUTER --> RAG
     RAG --> VDB
     ROUTER --> SLM
+    ROUTER -->|resolve approved manifest| REG
+    REG -->|qualified immutable version| RUNTIME
     RAG --> SLM
-    SLM --> TOOLS
+    SLM --> ROUTER
+    ROUTER -->|independent list/call| RUNTIME
+    RUNTIME --> TOOLS
     TOOLS --> MAPI
     TOOLS --> FAPI
     TOOLS --> HAPI
@@ -81,7 +87,15 @@ The edges in this rendering are unlabeled for maximum renderer compatibility. Th
 
 **SLM inference.** Phi-3-mini (3.8B) or Llama-3.2-3B fine-tuned on Tesserix-style support transcripts and product docs, served via vLLM on a single L4 GPU. Streams tokens. Knows it's a support agent because of the system prompt and the fine-tuning data.
 
-**Tool layer.** When the SLM emits a tool call (e.g., `lookup_order(order_id=...)`), the agent layer intercepts it, calls the product's existing API with the authenticated user's credentials, and feeds the result back into the SLM's context. This is how the chatbot answers "where is my order" — not by hallucinating, but by *looking it up*.
+**Customer AI Registry.** The Tesserix-owned registry stores the qualified YAML
+manifest, annotations, and immutable MCP version that may be exported through
+the gateway. Solo.io's registry is not part of this control plane.
+
+**Tesserix MCP Runtime and product catalogs.** When the SLM emits a tool call
+(e.g., `lookup_order(order_id=...)`), the router sends an independently complete,
+authenticated MCP `2026-07-28` request. The runtime enforces protocol, tenancy,
+limits, lifecycle, and transport guardrails before the tenant catalog calls its
+product API and returns the result to the SLM context.
 
 ## Per-product RAG namespacing
 

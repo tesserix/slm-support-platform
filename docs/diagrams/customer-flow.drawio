@@ -28,7 +28,7 @@
                 <mxCell id="lane-slm" value="SLM&#xa;(vLLM + Phi-3)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#FFEBEE;strokeColor=#C62828;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
                     <mxGeometry x="1010" y="100" width="180" height="940" as="geometry"/>
                 </mxCell>
-                <mxCell id="lane-mcp" value="MCP Client" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#00838F;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
+                <mxCell id="lane-mcp" value="Stateless MCP Client + Tesserix Runtime" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E0F7FA;strokeColor=#00838F;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">
                     <mxGeometry x="1200" y="100" width="180" height="940" as="geometry"/>
                 </mxCell>
                 <mxCell id="lane-mcp-srv" value="homechef-mcp&#xa;+ homechef-api" style="swimlane;rounded=1;whiteSpace=wrap;html=1;fillColor=#E1F5FE;strokeColor=#0277BD;fontSize=12;fontStyle=1;startSize=30;horizontal=1;" parent="1" vertex="1">

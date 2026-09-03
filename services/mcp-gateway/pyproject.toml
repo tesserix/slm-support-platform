@@ -6,8 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
   "httpx>=0.27,<1",
   "psycopg[binary]>=3.2,<3.3",
-  "starlette>=0.40,<1",
-  "uvicorn>=0.30,<1",
+  "tesserix-mcp-runtime @ https://github.com/tesserix/tesserix-mcp-runtime/releases/download/v0.1.0-rc.6/tesserix_mcp_runtime-0.1.0rc6-py3-none-any.whl#sha256=b372c4ad26de3cb24c6f826daf89702bf542174212e032db87d155230f39ec47",
   # PyYAML is only needed by openapi_loader.load_spec_from_file
   # when reading YAML-format specs. Light-weight enough to make it
   # a hard dep so file-backed Phase 4 specs Just Work without a

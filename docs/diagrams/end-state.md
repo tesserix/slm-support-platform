@@ -19,10 +19,12 @@ graph TB
     subgraph GKE
         BFF[support-bff]
         ROUTER[Router agent]
+        REG[Customer AI Registry]
         RAG[RAG retriever]
         VDB[Vector DB]
         SLM[SLM inference]
-        TOOLS[Tool layer]
+        RUNTIME[Tesserix MCP Runtime<br/>stateless 2026-07-28]
+        TOOLS[Per-product tool catalogs]
     end
 
     subgraph ProductAPIs
@@ -41,8 +43,12 @@ graph TB
     ROUTER --> RAG
     RAG --> VDB
     ROUTER --> SLM
+    ROUTER -->|resolve approved manifest| REG
+    REG -->|qualified immutable version| RUNTIME
     RAG --> SLM
-    SLM --> TOOLS
+    SLM --> ROUTER
+    ROUTER -->|independent list/call| RUNTIME
+    RUNTIME --> TOOLS
     TOOLS --> MAPI
     TOOLS --> FAPI
     TOOLS --> HAPI
@@ -58,7 +64,11 @@ graph TB
 - **Router agent** — detects which product the user is on and what kind of question it is; picks the RAG namespace and prompt.
 - **RAG retriever + Vector DB** — per-product namespaces (mark8ly, fanzone, homechef, …) holding embedded product docs.
 - **SLM inference** — vLLM-served fine-tuned Phi-3-mini (or equivalent), runs on a single L4 GPU in-cluster.
-- **Tool layer** — bridges from model "I want to look up an order" tokens to actual calls into product APIs.
+- **Customer AI Registry** — the Tesserix-owned registry of qualified MCP
+  manifests and immutable versions; Solo.io's registry is not in the runtime path.
+- **Tesserix MCP Runtime** — authenticates and bounds every stateless MCP request,
+  rejects session affinity, exports health/metrics, and hosts each product catalog.
+- **Per-product tool catalogs** — bridge approved model tool calls to product APIs.
 - **Product APIs** — the existing per-product backends (homechef-api, mark8ly APIs, etc.).
 
 ## Request flow walkthrough (a HomeChef customer asks about their order)
