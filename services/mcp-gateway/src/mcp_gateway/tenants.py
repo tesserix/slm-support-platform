@@ -1054,7 +1054,15 @@ def _register_platform(mcp, cfg: Config) -> None:
         message: str,
         company: str = "",
     ) -> dict[str, Any]:
-        body = {"name": name, "email": email, "message": message, "company": company}
+        first_name, _, last_name = name.strip().partition(" ")
+        body = {
+            "firstName": first_name,
+            "lastName": last_name,
+            "email": email,
+            "message": message,
+            "company": company,
+            "interest": "demo",
+        }
         result = await _post(
             cfg.tesserix_home_url,
             "/api/contact",
