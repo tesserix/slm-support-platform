@@ -296,6 +296,54 @@ def _iso(value: datetime) -> str:
     return value.isoformat()
 
 
+def _bad_path_segment(field: str, given: Any) -> dict[str, Any]:
+    return {
+        "error": "bad_path_segment",
+        "field": field,
+        "given": str(given),
+        "_action_for_assistant": (
+            f"{field} is not a valid value. Ask the customer for the correct "
+            f"{field} and call this tool again — do not guess or strip characters."
+        ),
+    }
+
+
+def _clean_slug(value: Any) -> str | None:
+    """Validate a single path segment supplied by the model (store slug,
+    product handle, category slug). Returns the segment unchanged when it's
+    safe to interpolate into a URL path, or None when it isn't.
+
+    A slug that is empty, contains a path separator, or is a `.`/`..`
+    segment would (once interpolated into the request path) silently
+    collapse or redirect the request onto a different, unscoped route —
+    so this must be checked before the request is issued, not after."""
+    text = str(value or "").strip()
+    if not text or "/" in text or "\\" in text or text in (".", ".."):
+        return None
+    return text
+
+
+def _project_product(product: dict[str, Any]) -> dict[str, Any]:
+    """Project a raw storefront product payload down to the fields an
+    assistant needs to describe or recommend a product to a customer.
+
+    Deliberately excludes cart/tax mechanics and internal identifiers
+    (`id`, `tax_code`, `tax_rate_override`, `tax_category`) — those are
+    not facts about the product and must never reach the model. Every
+    tool that returns a product (list or single) must route it through
+    here so a future tool can't reintroduce the leak."""
+    return {
+        "handle": product.get("handle"),
+        "title": product.get("title"),
+        "description": product.get("description"),
+        "price_min": product.get("price_min"),
+        "price_max": product.get("price_max"),
+        "currency": product.get("currency") or product.get("currency_code"),
+        "category_slugs": product.get("category_slugs") or product.get("categories"),
+        "image_urls": product.get("image_urls") or product.get("images"),
+    }
+
+
 # ---------------------------------------------------------------------------
 # mark8ly — marketplace e-commerce
 # ---------------------------------------------------------------------------
@@ -524,6 +572,158 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
                 "follow up. Do not promise a specific resolution or time."
             )
         return result
+
+    def _paging_params(page: Any, page_size: Any) -> dict[str, Any]:
+        """Build `page`/`page_size` params for a storefront list call,
+        omitting whichever wasn't supplied so the handler's own defaults
+        (page 1, size 20) apply. NEVER send `limit`/`offset` here — the
+        storefront query struct doesn't bind them, so they're silently
+        ignored and the handler always returns page 1."""
+        params: dict[str, Any] = {}
+        if page is not None:
+            try:
+                params["page"] = max(1, int(page))
+            except (TypeError, ValueError):
+                pass
+        if page_size is not None:
+            try:
+                params["page_size"] = max(1, min(int(page_size), 100))
+            except (TypeError, ValueError):
+                pass
+        return params
+
+    @mcp.tool(
+        name="list_store_products",
+        description=(
+            "List a store's public product catalogue (paginated). Use this to "
+            "browse or search what a store sells — this is public storefront "
+            "data, no customer identity needed. Pass page/page_size to page "
+            "through results (page_size capped at 100; both default on the "
+            "backend when omitted). Use list_store_categories first to find "
+            "valid category filters if you need to narrow by category — or "
+            "call list_products_by_category directly with a category slug."
+        ),
+    )
+    async def list_store_products(
+        store_slug: str = "tesserix-store",
+        page: int | None = None,
+        page_size: int | None = None,
+    ) -> dict[str, Any]:
+        slug = _clean_slug(store_slug)
+        if slug is None:
+            return _bad_path_segment("store_slug", store_slug)
+        result = await _get_json(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{slug}/products",
+            source="mp-storefront",
+            params=_paging_params(page, page_size),
+            headers=dict(cfg.openapi_backend_headers or {}),
+        )
+        if "error" not in result and isinstance(result.get("data"), list):
+            result["data"] = [_project_product(p) for p in result["data"]]
+        return result
+
+    @mcp.tool(
+        name="get_store_product",
+        description=(
+            "Look up a single product in a store's public catalogue by its "
+            "handle (the URL-friendly slug, not an internal id). Public "
+            "storefront data — no customer identity needed. Use "
+            "list_store_products or list_products_by_category to find the "
+            "handle first if you don't already have it."
+        ),
+    )
+    async def get_store_product(
+        handle: str, store_slug: str = "tesserix-store"
+    ) -> dict[str, Any]:
+        slug = _clean_slug(store_slug)
+        if slug is None:
+            return _bad_path_segment("store_slug", store_slug)
+        clean_handle = _clean_slug(handle)
+        if clean_handle is None:
+            return _bad_path_segment("handle", handle)
+        result = await _get_json(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{slug}/products/{clean_handle}",
+            source="mp-storefront",
+            headers=dict(cfg.openapi_backend_headers or {}),
+        )
+        if "error" in result:
+            return result
+        return {**_project_product(result), "source": result.get("source")}
+
+    @mcp.tool(
+        name="list_store_categories",
+        description=(
+            "List a store's public product categories. Use this to find the "
+            "category slugs that list_products_by_category needs — public "
+            "storefront data, no customer identity needed."
+        ),
+    )
+    async def list_store_categories(store_slug: str = "tesserix-store") -> dict[str, Any]:
+        slug = _clean_slug(store_slug)
+        if slug is None:
+            return _bad_path_segment("store_slug", store_slug)
+        return await _get_json(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{slug}/categories",
+            source="mp-storefront",
+            headers=dict(cfg.openapi_backend_headers or {}),
+        )
+
+    @mcp.tool(
+        name="list_products_by_category",
+        description=(
+            "List products in a store under one category (paginated). Get the "
+            "category_slug from list_store_categories first. Public storefront "
+            "data — no customer identity needed. Pass page/page_size to page "
+            "through results (page_size capped at 100; both default on the "
+            "backend when omitted)."
+        ),
+    )
+    async def list_products_by_category(
+        category_slug: str,
+        store_slug: str = "tesserix-store",
+        page: int | None = None,
+        page_size: int | None = None,
+    ) -> dict[str, Any]:
+        slug = _clean_slug(store_slug)
+        if slug is None:
+            return _bad_path_segment("store_slug", store_slug)
+        clean_category = _clean_slug(category_slug)
+        if clean_category is None:
+            return _bad_path_segment("category_slug", category_slug)
+        result = await _get_json(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{slug}/categories/{clean_category}/products",
+            source="mp-storefront",
+            params=_paging_params(page, page_size),
+            headers=dict(cfg.openapi_backend_headers or {}),
+        )
+        if "error" not in result and isinstance(result.get("data"), list):
+            result["data"] = [_project_product(p) for p in result["data"]]
+        return result
+
+    @mcp.tool(
+        name="get_store_branding",
+        description=(
+            "Get a store's public branding — name, logo, theme colours, and "
+            "the current active_promotion banner if one is running (the field "
+            "is omitted entirely when there's no active promotion — don't tell "
+            "the customer about a promotion unless this field is present). "
+            "Public storefront data, no customer identity needed."
+        ),
+    )
+    async def get_store_branding(store_slug: str = "tesserix-store") -> dict[str, Any]:
+        slug = _clean_slug(store_slug)
+        if slug is None:
+            return _bad_path_segment("store_slug", store_slug)
+        return await _get_json(
+            cfg.mark8ly_orders_url,
+            f"/api/v1/storefront/stores/{slug}/branding",
+            source="mp-storefront",
+            headers=dict(cfg.openapi_backend_headers or {}),
+        )
 
 
 # ---------------------------------------------------------------------------
