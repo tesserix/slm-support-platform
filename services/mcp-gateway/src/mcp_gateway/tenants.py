@@ -66,6 +66,16 @@ def _homechef_signed_headers(
     missing, so the assistant can never make an unauthenticated call or act for
     an unverified user. The backend scopes every order to X-User-Id, so the
     assistant only ever sees this customer's orders."""
+    # Refuse to SIGN a path we would refuse to request. _get_json/_post
+    # already reject unsafe segments, so nothing unsafe reaches the network
+    # either way — but signing first and validating second is the wrong
+    # order to leave in place. The signature covers `path` as written, while
+    # httpx would collapse "../" *after* signing, so the two could describe
+    # different routes; and the check would silently depend on a guard in a
+    # different function that a future refactor could move. Checking here
+    # keeps "what we signed" and "what we send" the same statement.
+    if _first_unsafe_segment(path) is not None:
+        return None
     if not cfg.homechef_bff_hmac_key:
         return None
     ctx = _trusted_ctx()
@@ -454,6 +464,10 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
                     "to sign in (or verify their email) and try again."
                 ),
             }
+        if _clean_slug(store_slug) is None:
+            return _bad_path_segment("store_slug", store_slug)
+        if _clean_slug(order_id) is None:
+            return _bad_path_segment("order_id", order_id)
         path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}"
         return await _get_json(
             cfg.mark8ly_orders_url,
@@ -472,6 +486,10 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
     async def list_returns(
         order_id: str, store_slug: str = "tesserix-store", limit: int = 5
     ) -> dict[str, Any]:
+        if _clean_slug(store_slug) is None:
+            return _bad_path_segment("store_slug", store_slug)
+        if _clean_slug(order_id) is None:
+            return _bad_path_segment("order_id", order_id)
         path = f"/api/v1/storefront/stores/{store_slug}/orders/{order_id}/returns"
         return await _get_json(
             cfg.mark8ly_orders_url,
@@ -545,6 +563,10 @@ def _register_mark8ly(mcp, cfg: Config) -> None:
         type: str = "return",
         currency_code: str = "INR",
     ) -> dict[str, Any]:
+        if _clean_slug(store_slug) is None:
+            return _bad_path_segment("store_slug", store_slug)
+        if _clean_slug(order_id) is None:
+            return _bad_path_segment("order_id", order_id)
         if not items:
             return {
                 "error": "items_required",
@@ -917,6 +939,8 @@ def _register_homechef(mcp, cfg: Config) -> None:
         description="Look up a HomeChef order by id. Status, ETA, chef, items, driver location.",
     )
     async def get_order_status(order_id: str) -> dict[str, Any]:
+        if _clean_slug(order_id) is None:
+            return _bad_path_segment("order_id", order_id)
         path = f"/api/v1/orders/{order_id}"
         headers = _homechef_signed_headers(cfg, "GET", path)
         if headers is None:
@@ -939,6 +963,8 @@ def _register_homechef(mcp, cfg: Config) -> None:
         description="Is a chef currently taking orders + their next delivery window.",
     )
     async def get_chef_availability(chef_id: str) -> dict[str, Any]:
+        if _clean_slug(chef_id) is None:
+            return _bad_path_segment("chef_id", chef_id)
         return await _get_json(
             cfg.homechef_api_url,
             f"/api/v1/chefs/{chef_id}",
@@ -950,6 +976,8 @@ def _register_homechef(mcp, cfg: Config) -> None:
         description="Live delivery state for an in-flight order. Coords + ETA + masked driver phone.",
     )
     async def track_delivery(order_id: str) -> dict[str, Any]:
+        if _clean_slug(order_id) is None:
+            return _bad_path_segment("order_id", order_id)
         path = f"/api/v1/orders/{order_id}/track"
         headers = _homechef_signed_headers(cfg, "GET", path)
         if headers is None:
@@ -1049,6 +1077,8 @@ def _register_homechef(mcp, cfg: Config) -> None:
         reason: str,
         findings: str = "",
     ) -> dict[str, Any]:
+        if _clean_slug(order_id) is None:
+            return _bad_path_segment("order_id", order_id)
         path = f"/api/v1/orders/{order_id}/report-issue"
         form = {"reason": reason, "description": findings or reason}
         content = urlencode(form).encode()

@@ -101,3 +101,36 @@ def test_error_never_invites_a_retry_with_a_stripped_id():
     msg = _unsafe_path_error("mp-orders", "..")["_action_for_assistant"]
     assert "do not" in msg.lower()
     assert "guess" in msg.lower()
+
+
+# ---------------------------------------------------------------------------
+# Signing order, and refusing by the right name.
+# ---------------------------------------------------------------------------
+
+from types import SimpleNamespace
+
+from mcp_gateway import tenants as T
+
+
+def test_never_signs_a_path_it_would_not_request(monkeypatch):
+    """The HMAC covers `path` as written, but httpx would collapse "../"
+    AFTER signing — so a signature could describe a different route than the
+    one requested. Refusing to sign keeps the two the same statement, and
+    stops this depending on a guard living in another function."""
+    monkeypatch.setattr(T, "_trusted_ctx", lambda: {"customer_id": "u1"})
+    cfg = SimpleNamespace(homechef_bff_hmac_key="c2VjcmV0")  # base64 "secret"
+
+    assert T._homechef_signed_headers(cfg, "GET", "/api/v1/orders/ok/track") is not None
+    assert T._homechef_signed_headers(cfg, "GET", "/api/v1/orders/../../admin") is None
+
+
+def test_a_bad_id_is_not_reported_as_a_sign_in_problem():
+    """Regression on the failure mode this change exists to avoid: the
+    signing helper returns None for BOTH 'no verified customer' and 'unsafe
+    path', and its callers turn None into identity_unverified — which would
+    tell a customer to sign in when the real fault is a mistyped order id.
+    The tools validate by name first so the refusal points at the argument."""
+    err = T._bad_path_segment("order_id", "../../admin")
+    assert err["error"] == "bad_path_segment"
+    assert err["field"] == "order_id"
+    assert "sign in" not in err["_action_for_assistant"].lower()
