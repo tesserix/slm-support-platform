@@ -116,6 +116,57 @@ def register(mcp, cfg: Config) -> None:
 _HTTP_TIMEOUT_SECONDS = 4.0
 
 
+# Every id below reaches us as a tool argument, i.e. from the model, i.e.
+# ultimately from whatever the customer typed. Interpolating one straight
+# into a request path is not safe, because httpx COLLAPSES dot segments
+# rather than rejecting them — the request does not fail, it silently
+# lands on a different upstream route:
+#
+#   >>> str(httpx.URL("https://h/api/v1/stores/s/orders/../../admin"))
+#   'https://h/api/v1/admin'
+#
+# So the check has to happen before the request is issued. It lives in
+# _get_json/_post rather than in each tool because that is the one place
+# every backend call already funnels through: a tool added later inherits
+# the guard instead of having to remember it.
+#
+# Percent-encoded separators (%2f) are deliberately NOT treated as unsafe
+# here — httpx leaves them encoded, so they stay a single opaque segment
+# and never traverse. Whether the upstream decodes them is the upstream's
+# contract to enforce.
+def _first_unsafe_segment(path: str) -> str | None:
+    """Return the first path segment that must never be interpolated into
+    a request path, or None when every segment is safe.
+
+    Unsafe means either a dot segment (`.`/`..`), which httpx collapses
+    into a different route, or an interior/trailing empty segment, which
+    means an id arrived empty and the request would hit a shorter and
+    less-scoped route than the caller intended. A LEADING empty segment
+    is just the path's own opening slash and is fine.
+    """
+    for index, segment in enumerate(path.split("/")):
+        if segment in (".", ".."):
+            return segment
+        if segment == "" and index > 0:
+            return segment
+    return None
+
+
+def _unsafe_path_error(source: str, segment: str) -> dict[str, Any]:
+    """Structured refusal for a path we will not request. Mirrors
+    _bad_path_segment's shape so the assistant handles both identically."""
+    return {
+        "error": "bad_path_segment",
+        "given": segment,
+        "source": source,
+        "_action_for_assistant": (
+            "One of the ids passed to this tool is not a valid value. Ask the "
+            "customer for the correct id and call this tool again — do not "
+            "guess, strip characters, or retry with a modified id."
+        ),
+    }
+
+
 async def _get_json(
     base_url: str,
     path: str,
@@ -128,6 +179,10 @@ async def _get_json(
     with `source`) or a structured error. Never raises — the caller
     hands the dict back to the SLM as the tool result either way.
     """
+    unsafe = _first_unsafe_segment(path)
+    if unsafe is not None:
+        logger.warning("refusing GET to %s: unsafe path segment %r", source, unsafe)
+        return _unsafe_path_error(source, unsafe)
     url = f"{base_url}{path}"
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
@@ -167,6 +222,10 @@ async def _post(
     'requested' state / an order issue) that a human owner or admin must
     approve before any refund is issued.
     """
+    unsafe = _first_unsafe_segment(path)
+    if unsafe is not None:
+        logger.warning("refusing POST to %s: unsafe path segment %r", source, unsafe)
+        return _unsafe_path_error(source, unsafe)
     url = f"{base_url}{path}"
     try:
         async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_SECONDS) as client:
