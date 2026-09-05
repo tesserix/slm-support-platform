@@ -22,19 +22,32 @@ def _registry(**overrides: object) -> ToolRegistry:
     return registry
 
 
+# Matches StorefrontProductResponse verbatim (marketplace-api's
+# internal/handlers/storefront/dto.go) — including price_range.min/max as
+# JSON STRINGS (decimal.Decimal on the Go side) and media entries that
+# aren't all images.
 _RAW_PRODUCT = {
     "id": "internal-uuid-should-not-leak",
     "handle": "wool-jumper",
     "title": "Wool Jumper",
     "description": "Warm and cosy.",
-    "price_min": 4900,
-    "price_max": 6900,
-    "currency": "INR",
-    "category_slugs": ["knitwear"],
-    "image_urls": ["https://cdn.test/wool-jumper.jpg"],
+    "tags": ["winter", "knitwear"],
+    "categories": [
+        {"name": "Knitwear", "slug": "knitwear"},
+        {"name": "Winter", "slug": "winter"},
+    ],
+    "options": [{"name": "Size", "values": ["S", "M", "L"]}],
+    "variants": [],
+    "media": [
+        {"url": "https://cdn.test/wool-jumper-2.jpg", "media_type": "image", "position": 2},
+        {"url": "https://cdn.test/wool-jumper-spec.pdf", "media_type": "document", "position": 1},
+        {"url": "https://cdn.test/wool-jumper-1.jpg", "media_type": "image", "position": 1},
+    ],
+    "price_range": {"min": "49.00", "max": "69.00", "currency_code": "INR"},
     "tax_code": "TX-1",
-    "tax_rate_override": 0.18,
+    "tax_rate_override": "0.18",
     "tax_category": "apparel",
+    "published_at": "2026-01-01T00:00:00Z",
 }
 
 
@@ -53,12 +66,20 @@ async def test_list_store_products_projects_and_strips_tax_fields() -> None:
         "handle": "wool-jumper",
         "title": "Wool Jumper",
         "description": "Warm and cosy.",
-        "price_min": 4900,
-        "price_max": 6900,
-        "currency": "INR",
-        "category_slugs": ["knitwear"],
-        "image_urls": ["https://cdn.test/wool-jumper.jpg"],
+        "price_range": {"min": "49.00", "max": "69.00", "currency_code": "INR"},
+        "categories": [
+            {"name": "Knitwear", "slug": "knitwear"},
+            {"name": "Winter", "slug": "winter"},
+        ],
+        "images": [
+            "https://cdn.test/wool-jumper-1.jpg",
+            "https://cdn.test/wool-jumper-2.jpg",
+        ],
     }
+    # Money must survive as strings — decimal.Decimal on the Go side. A
+    # float would silently round a price.
+    assert isinstance(product["price_range"]["min"], str)
+    assert isinstance(product["price_range"]["max"], str)
     for leaked_field in ("id", "tax_code", "tax_rate_override", "tax_category"):
         assert leaked_field not in product
     assert result["meta"] == {"total": 1}
@@ -105,20 +126,33 @@ async def test_get_store_product_returns_bare_projected_object() -> None:
     result = await registry.call("get_store_product", {"handle": "wool-jumper"})
 
     assert result["handle"] == "wool-jumper"
-    assert "id" not in result
-    assert "tax_code" not in result
+    assert result["price_range"] == {"min": "49.00", "max": "69.00", "currency_code": "INR"}
+    assert result["categories"] == [
+        {"name": "Knitwear", "slug": "knitwear"},
+        {"name": "Winter", "slug": "winter"},
+    ]
+    assert result["images"] == [
+        "https://cdn.test/wool-jumper-1.jpg",
+        "https://cdn.test/wool-jumper-2.jpg",
+    ]
+    for leaked_field in ("id", "tax_code", "tax_rate_override", "tax_category", "currency"):
+        assert leaked_field not in result
 
 
 @respx.mock
 async def test_list_store_categories_returns_data_list() -> None:
+    # Matches StorefrontCategoryResponse verbatim: {name, slug, position,
+    # featured} — no product count field, whatever an OpenAPI doc might claim.
     registry = _registry()
+    category = {"name": "Knitwear", "slug": "knitwear", "position": 1, "featured": True}
     respx.get("https://mark8ly.test/api/v1/storefront/stores/tesserix-store/categories").mock(
-        return_value=httpx.Response(200, json={"data": [{"slug": "knitwear"}]})
+        return_value=httpx.Response(200, json={"data": [category]})
     )
 
     result = await registry.call("list_store_categories", {})
 
-    assert result["data"] == [{"slug": "knitwear"}]
+    assert result["data"] == [category]
+    assert "product_count" not in result["data"][0]
 
 
 @respx.mock
@@ -133,7 +167,16 @@ async def test_list_products_by_category_projects_products() -> None:
         "list_products_by_category", {"category_slug": "knitwear"}
     )
 
-    assert "tax_code" not in result["data"][0]
+    (product,) = result["data"]
+    assert product["categories"] == [
+        {"name": "Knitwear", "slug": "knitwear"},
+        {"name": "Winter", "slug": "winter"},
+    ]
+    assert product["images"] == [
+        "https://cdn.test/wool-jumper-1.jpg",
+        "https://cdn.test/wool-jumper-2.jpg",
+    ]
+    assert "tax_code" not in product
 
 
 @respx.mock

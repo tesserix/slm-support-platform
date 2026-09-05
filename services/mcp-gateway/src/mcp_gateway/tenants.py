@@ -324,23 +324,49 @@ def _clean_slug(value: Any) -> str | None:
 
 
 def _project_product(product: dict[str, Any]) -> dict[str, Any]:
-    """Project a raw storefront product payload down to the fields an
-    assistant needs to describe or recommend a product to a customer.
+    """Project a raw storefront product payload (marketplace-api's
+    `StorefrontProductResponse`, see
+    `marketplace-api/internal/handlers/storefront/dto.go`) down to the
+    fields an assistant needs to describe or recommend a product to a
+    customer.
+
+    Field shapes are read verbatim off the DTO, not guessed:
+      - `price_range.min`/`.max` are `decimal.Decimal` on the Go side and
+        marshal as JSON STRINGS — kept as strings here, never coerced to
+        float. A float-rounded price quoted to a customer is a real defect.
+      - `categories` is a list of `{name, slug}` objects — there is no
+        top-level `category_slugs`.
+      - `media` carries every media item (images and otherwise); only
+        entries with `media_type == "image"` are pictures, ordered by
+        `position`.
 
     Deliberately excludes cart/tax mechanics and internal identifiers
     (`id`, `tax_code`, `tax_rate_override`, `tax_category`) — those are
-    not facts about the product and must never reach the model. Every
-    tool that returns a product (list or single) must route it through
-    here so a future tool can't reintroduce the leak."""
+    not facts about the product and must never reach the model. There are
+    NO fallback key names: if marketplace-api renames a field, this must
+    visibly return nothing for it rather than quietly matching some other
+    spelling that also isn't there. Every tool that returns a product
+    (list or single) must route it through here so a future tool can't
+    reintroduce the leak."""
+    price_range = product.get("price_range") or {}
+    images = sorted(
+        (m for m in (product.get("media") or []) if m.get("media_type") == "image"),
+        key=lambda m: m.get("position", 0),
+    )
     return {
         "handle": product.get("handle"),
         "title": product.get("title"),
         "description": product.get("description"),
-        "price_min": product.get("price_min"),
-        "price_max": product.get("price_max"),
-        "currency": product.get("currency") or product.get("currency_code"),
-        "category_slugs": product.get("category_slugs") or product.get("categories"),
-        "image_urls": product.get("image_urls") or product.get("images"),
+        "price_range": {
+            "min": price_range.get("min"),
+            "max": price_range.get("max"),
+            "currency_code": price_range.get("currency_code"),
+        },
+        "categories": [
+            {"name": c.get("name"), "slug": c.get("slug")}
+            for c in (product.get("categories") or [])
+        ],
+        "images": [m.get("url") for m in images],
     }
 
 
