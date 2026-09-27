@@ -64,7 +64,7 @@ The only new ingress object is one VirtualService. Helm chart `tesserix-k8s/char
 | **MCP servers** | Python (FastMCP) per product | Matches `scrapper-mcp` (Python). Each product team owns their MCP repo. |
 | **Doc ingestion** | CronJob in `tesserix-k8s`, every 30 min | Mirrors `db-schema-bootstrap` pattern. Watches product doc repos, chunks, embeds, upserts. |
 | **Frontend chat widget** | React component published from `@tesserix/web` package | Already the shared frontend package; widget mounts in each product's app shell |
-| **Secrets** | GCP Secret Manager via External Secrets Operator | Standard Tesserix pattern; no in-cluster Kubernetes Secrets for app credentials |
+| **Secrets** | OpenBao via External Secrets Operator | Namespace-bound readers materialize application Kubernetes Secrets; GCP retains critical platform/bootstrap/recovery exceptions |
 
 ### CPU performance expectations (be honest)
 
@@ -136,7 +136,7 @@ CPU requests only — no CPU limits (per the Tesserix convention).
 ### New namespace: `support-platform`
 - Labels: `istio.io/dataplane-mode=ambient`, `kubernetes.io/metadata.name=support-platform`
 - NetworkPolicy: explicit allow TCP 15008 to/from the cluster pod CIDR (ambient HBONE — the silent-failure trap from the prior auth outage)
-- ExternalSecret: pulls `support-platform-hf-token` (HuggingFace), `support-platform-mcp-keys` from GCP Secret Manager
+- ExternalSecret: reads product-prefixed Support Platform credentials from OpenBao. Shared MCP keys retain their product ownership and scoped reader grants; remaining legacy GCP cutovers are tracked in tesserix/tesserix-k8s#1209.
 
 ### Helm chart
 - Path: `tesserix-k8s/charts/apps/support-platform/`
