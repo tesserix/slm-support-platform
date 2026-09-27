@@ -28,7 +28,7 @@ Create `tesserix-k8s/charts/apps/support-platform/` with the standard Tesserix c
 - `Chart.yaml`, `values.yaml`, `templates/_helpers.tpl` (boilerplate)
 - `templates/namespace.yaml` — `support-platform` namespace with `istio.io/dataplane-mode=ambient` label
 - `templates/networkpolicy-hbone.yaml` — explicit allow TCP 15008 to/from the pod CIDR (the silent-failure trap)
-- `templates/externalsecret-platform.yaml` — pulls `support-platform-hf-token`, `support-platform-openai-fallback`, MCP API keys from GCP Secret Manager
+- Application ExternalSecrets read product-prefixed credentials from OpenBao through namespace-bound readers. Any new provider fallback key belongs in OpenBao; shared MCP credentials retain their owner paths. Track legacy GCP source retirement in tesserix/tesserix-k8s#1209.
 
 ### B-2. ArgoCD app-of-apps
 
