@@ -26,9 +26,9 @@ type Customer struct {
 
 // Assignee is the staff member currently handling the thread. Set on accept.
 type Assignee struct {
-	UserID    string    `bson:"user_id" json:"user_id"`
-	Name      string    `bson:"name,omitempty" json:"name,omitempty"`
-	Email     string    `bson:"email,omitempty" json:"email,omitempty"`
+	UserID     string    `bson:"user_id" json:"user_id"`
+	Name       string    `bson:"name,omitempty" json:"name,omitempty"`
+	Email      string    `bson:"email,omitempty" json:"email,omitempty"`
 	AssignedAt time.Time `bson:"assigned_at" json:"assigned_at"`
 }
 
@@ -64,7 +64,10 @@ type Feedback struct {
 
 // Conversation is a single support thread, fully scoped by tenant + store.
 type Conversation struct {
-	ID            string     `bson:"_id" json:"id"`
+	ProductID        string `bson:"product_id,omitempty" json:"product_id,omitempty"`
+	ClientTenantID   string `bson:"client_tenant_id,omitempty" json:"client_tenant_id,omitempty"`
+	ClientTenantName string `bson:"client_tenant_name,omitempty" json:"client_tenant_name,omitempty"`
+	ID               string `bson:"_id" json:"id"`
 	// CaseID is a human-readable reference (CS-YYMMDD-XXXX) both parties
 	// can quote when discussing the thread off-channel. The full uuid ID
 	// is still the database key; CaseID is purely for humans.

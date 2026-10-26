@@ -21,6 +21,7 @@ import (
 	ottomongo "github.com/tesserix/slm-support-platform/services/otto/internal/mongo"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/observability"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/otp"
+	"github.com/tesserix/slm-support-platform/services/otto/internal/rocketchat"
 	"github.com/tesserix/slm-support-platform/services/otto/internal/session"
 )
 
@@ -196,6 +197,16 @@ func main() {
 		SweepInterval:    60 * time.Second,
 	}
 	go sweeper.Run(ctx)
+	if cfg.RocketChatEnabled {
+		if len(cfg.RocketChatStaffIDs) == 0 {
+			panic("support bridge: staff allowlist required")
+		}
+		chat, err := rocketchat.NewClient(rocketchat.Config{URL: cfg.RocketChatURL, UserID: cfg.RocketChatUserID, Token: cfg.RocketChatToken, RoomID: cfg.RocketChatRoomID, StaffIDs: cfg.RocketChatStaffIDs})
+		if err != nil {
+			panic("support bridge: invalid configuration")
+		}
+		go rocketchat.NewWorker(mongoClient.DB(), chat, h, log).Run(ctx)
+	}
 
 	// Optional NATS bridge — queue-lifecycle transitions (created /
 	// escalated / accepted / closed) for product backends to consume

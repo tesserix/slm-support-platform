@@ -21,8 +21,14 @@ var ErrInternalAuthRequired = errors.New(
 // Config holds runtime settings for the otto service.
 // All fields load from env vars via kelseyhightower/envconfig.
 type Config struct {
-	Env      string `envconfig:"ENV" default:"dev"`
-	HTTPPort int    `envconfig:"HTTP_PORT" default:"8080"`
+	RocketChatEnabled  bool     `envconfig:"ROCKETCHAT_SUPPORT_ENABLED" default:"false"`
+	RocketChatURL      string   `envconfig:"ROCKETCHAT_URL" default:"https://rocketchat.tesserix.app"`
+	RocketChatUserID   string   `envconfig:"ROCKETCHAT_SUPPORT_USER_ID"`
+	RocketChatToken    string   `envconfig:"ROCKETCHAT_SUPPORT_AUTH_TOKEN"`
+	RocketChatRoomID   string   `envconfig:"ROCKETCHAT_SUPPORT_ROOM_ID"`
+	RocketChatStaffIDs []string `envconfig:"ROCKETCHAT_SUPPORT_STAFF_IDS"`
+	Env                string   `envconfig:"ENV" default:"dev"`
+	HTTPPort           int      `envconfig:"HTTP_PORT" default:"8080"`
 
 	MongoURL      string `envconfig:"MONGO_URL" required:"true"`
 	MongoDatabase string `envconfig:"MONGO_DATABASE" default:"otto"`

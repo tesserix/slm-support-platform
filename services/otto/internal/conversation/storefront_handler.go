@@ -267,12 +267,15 @@ func (h *StorefrontHandler) create(c *gin.Context) {
 		caseID = "CS-" + time.Now().UTC().Format("060102") + "-0000"
 	}
 	conv := &Conversation{
-		ID:            uuid.NewString(),
-		CaseID:        caseID,
-		TenantID:      tenantID,
-		StoreID:       storeID,
-		Status:        StatusPending,
-		Subject:       body.Subject,
+		ProductID:        c.GetString(auth.CtxProductID),
+		ClientTenantID:   c.GetString(auth.CtxClientTenantID),
+		ClientTenantName: c.GetString(auth.CtxClientTenantName),
+		ID:               uuid.NewString(),
+		CaseID:           caseID,
+		TenantID:         tenantID,
+		StoreID:          storeID,
+		Status:           StatusPending,
+		Subject:          body.Subject,
 		Customer: Customer{
 			SessionToken: tok.ID,
 			UserID:       verifiedUserID,
