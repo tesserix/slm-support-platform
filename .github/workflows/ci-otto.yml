@@ -40,6 +40,18 @@ jobs:
       - name: go test
         working-directory: services/otto
         run: go test -race -count=1 ./...
+      - name: Support bridge integration tests
+        working-directory: services/otto
+        env:
+          TEST_MONGO_URL: mongodb://127.0.0.1:15441/?directConnection=true&replicaSet=rs0
+        run: |
+          docker run -d --name support-chat-test-mongo -p 127.0.0.1:15441:27017 mongo:7.0@sha256:c53852c00c23ca9f23fc39690350ffa9a80e3642fe8f96879726d8da0abe80a7 --replSet rs0 --bind_ip_all
+          for attempt in $(seq 1 30); do
+            if docker exec support-chat-test-mongo mongosh --quiet --eval 'db.adminCommand({ping:1})'; then break; fi
+            sleep 1
+          done
+          docker exec support-chat-test-mongo mongosh --quiet --eval 'rs.initiate({_id:"rs0",members:[{_id:0,host:"localhost:27017"}]})'
+          go test -race -tags=integration -count=1 ./internal/rocketchat
 
   build-and-push:
     name: build & push image

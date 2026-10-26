@@ -12,13 +12,16 @@ import (
 
 // Context keys set by these middlewares. Handlers read them via c.GetString.
 const (
-	CtxTenantID     = "tenant_id"
-	CtxStoreID      = "store_id"
-	CtxUserID       = "user_id"
-	CtxUserEmail    = "user_email"
-	CtxUserName     = "user_name"
-	CtxUserRole     = "user_role"
-	CtxSessionToken = "session_token"
+	CtxProductID        = "product_id"
+	CtxClientTenantID   = "client_tenant_id"
+	CtxClientTenantName = "client_tenant_name"
+	CtxTenantID         = "tenant_id"
+	CtxStoreID          = "store_id"
+	CtxUserID           = "user_id"
+	CtxUserEmail        = "user_email"
+	CtxUserName         = "user_name"
+	CtxUserRole         = "user_role"
+	CtxSessionToken     = "session_token"
 	// CtxSurface marks which auth surface admitted the request. Only the
 	// cross-tenant platform inbox sets it (to "platform"); the tenant-scoped
 	// StaffAuth path leaves it empty. emitAudit folds it into the audit
@@ -87,12 +90,12 @@ func PlatformAuth(internalSecret string) gin.HandlerFunc {
 
 // PlatformStaff gates the cross-tenant platform INBOX endpoints
 // (list/accept/reply/close). Two requirements, both mandatory:
-//   1. the internal shared secret — empty configured secret denies,
-//      same rule as PlatformAuth: a cross-tenant surface must never
-//      fall open;
-//   2. a staff identity (X-User-Id) forwarded by the tesserix-home
-//      admin proxy — accept/reply/close must be attributable to a
-//      human, so an anonymous secret-holder is rejected.
+//  1. the internal shared secret — empty configured secret denies,
+//     same rule as PlatformAuth: a cross-tenant surface must never
+//     fall open;
+//  2. a staff identity (X-User-Id) forwarded by the tesserix-home
+//     admin proxy — accept/reply/close must be attributable to a
+//     human, so an anonymous secret-holder is rejected.
 func PlatformStaff(internalSecret string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if internalSecret == "" || !constantTimeEqual(c.GetHeader("X-Internal-Auth"), internalSecret) {
@@ -166,6 +169,11 @@ func CustomerContext(internalSecret string) gin.HandlerFunc {
 		}
 		c.Set(CtxTenantID, tenantID)
 		c.Set(CtxStoreID, storeID)
+		if internalSecret != "" && tenantID == "platform" && storeID == "default" && c.GetHeader("X-User-Id") != "" && c.GetHeader("X-Product-Id") == "mark8ly" {
+			c.Set(CtxProductID, "mark8ly")
+			c.Set(CtxClientTenantID, c.GetHeader("X-Client-Tenant-Id"))
+			c.Set(CtxClientTenantName, c.GetHeader("X-Client-Tenant-Name"))
+		}
 		// Logged-in customers — if the storefront proxy forwards a user id
 		// we remember it so messages can be attributed.
 		if uid := c.GetHeader("X-User-Id"); uid != "" {

@@ -73,6 +73,7 @@ func (c *Client) Audit() *mongo.Collection             { return c.db.Collection(
 // isolation + fast inbox queries. Idempotent — safe to run every boot.
 func (c *Client) EnsureIndexes(ctx context.Context) error {
 	convIdx := []mongo.IndexModel{
+		{Keys: bson.D{{Key: "product_id", Value: 1}, {Key: "tenant_id", Value: 1}, {Key: "store_id", Value: 1}, {Key: "rocketchat_next", Value: 1}, {Key: "_id", Value: 1}}, Options: options.Index().SetName("product_rocketchat_delivery")},
 		{
 			// Inbox: "pending + active conversations for this store, newest first".
 			Keys: bson.D{
