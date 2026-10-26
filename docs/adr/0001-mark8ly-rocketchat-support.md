@@ -1,6 +1,6 @@
 # Mark8ly support conversations in Rocket.Chat
 
-Status: implementation in progress; production is not enabled.
+Status: accepted. Runtime enablement and verification are controlled through GitOps.
 
 The existing mark8ly merchant support widget and mobile bridge call shared Otto
 under `platform/default`. Other products use the same scope, so scope alone must
